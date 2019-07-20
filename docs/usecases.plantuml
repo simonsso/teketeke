@@ -1,0 +1,52 @@
+@startuml UseCase
+'Convensions return arrows only shown if they carry data!
+
+== Welcome to our shop ==
+staff -> menu:GET /menu/          --get the full menu
+menu->menu_storeage
+menu<--menu_storeage
+menu --> staff
+== Order something ==
+staff -> table:PUT           --order one or more items in object
+table -> table_storage:store
+note over table_storage: There could be duplicate orders - it is likely
+== Answer a question from a table "Did we order more edamame..."==
+staff -> table:GET /table/17   --get everything on table 17
+table->table_storage
+table<--table_storage
+staff<--table
+
+== Correct an order ==
+staff -> table:GET /table/17/open --get only the 
+table->table_storage
+table<--table_storage
+staff<--table
+staff-> table: DELETE /table/17/item/87123
+table-> table_storage
+
+@enduml
+
+
+@startuml Setup Shop
+==open shop==
+actor kitchen
+kitchen -> menu: PUT -- put todays inventory to menu
+menu->menu_storage
+==check status==
+kitchen -> table:GET /table/open   --get everything all tables open
+table->table_storage
+table<--table_storage
+kitchen<--table
+==Cook and deliver items==
+kitchen -> table:GET /table/open   --get everything all tables open
+table->table_storage
+table<--table_storage
+kitchen<--table
+alt Separte Invouice service
+kitchen->invoice: PUT
+else Get tab from /table server
+kitchen->table: UPDATE -- update
+
+end
+
+@enduml
