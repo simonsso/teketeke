@@ -24,24 +24,6 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug with input",
-            "cargo": {
-                "args": [
-                    "run",
-                    "--bin=teketeke",
-                    "--package=teketeke",
-                    "<fil.csv"
-                ],
-                "filter": {
-                    "kind": "bin"
-                }
-            },
-            "args": [],
-            "cwd": "${workspaceFolder}"
-        },
-        {
-            "type": "lldb",
-            "request": "launch",
             "name": "Debug unit tests in executable 'teketeke'",
             "cargo": {
                 "args": [
