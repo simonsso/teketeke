@@ -1,8 +1,14 @@
-use hyper::{Body, Response, Server, Request};
-use hyper::rt::Future;
+use hyper::{Body, Response, Server, Request, StatusCode, Method};
+
 use lazy_static::lazy_static;
-use hyper::service::service_fn_ok;
-//TODO expect to need this: use hyper::service::service_fn;
+use hyper::service::service_fn;
+
+// added from example
+use std::io::{Error, ErrorKind};
+use std::fs;
+use std::path::Path;
+use futures::{future, Future, Stream};
+use tokio::fs::File;
 
 use regex::Regex;
 
@@ -11,10 +17,10 @@ use std::{thread, time};
 
 // Function for emulating execution time and explore locking anc blocking
 fn hw() ->String{
-    println!("HW start");
+    println!("HW start{:?}",thread::current().id() );
     let ten_sec = time::Duration::from_millis(10000);
-  //  thread::sleep(ten_sec);
-    println!("HW done");
+    thread::sleep(ten_sec);
+    println!("HW done {:?}",thread::current().id());
     "Hello, world!".to_string()
 }
 
@@ -25,9 +31,14 @@ lazy_static!{
 
 
 // Encapsulate response for hyper
-fn microservice_handler(req: Request<Body>) -> Response<Body> {
+fn microservice_handler(req: Request<Body>) -> Box<Future<Item=Response<Body>, Error=Error> + Send> {
         let ans:String = microservice_handler_inner(req.uri().to_string(), req.method().to_string());
-        Response::new(Body::from(ans))
+        
+        let resp = Response::builder()
+            .status(200)
+            .body(Body::from(ans))
+            .unwrap();
+        Box::new(future::ok(resp))
 }
 
 // Change argument for unit_tests
@@ -82,11 +93,9 @@ fn main() {
     println!("Starting server port");
     let addr = ([127, 0, 0, 1], 8888).into();
 
-    let handler = ||{service_fn_ok(|req| microservice_handler(req ))};
-    let server = Server::bind(&addr)
-        .serve(handler)
-        .map_err(|e| eprintln!("server error: {}", e));
+    let server = Server::bind(&addr).serve(move||{service_fn(move|req| microservice_handler(req ))});
 
+    let server = server.map_err(drop);
     hyper::rt::run(server);
 }
 
