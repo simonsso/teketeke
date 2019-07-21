@@ -42,11 +42,6 @@ kitchen -> table:GET /table/open   --get everything all tables open
 table->table_storage
 table<--table_storage
 kitchen<--table
-alt Separte Invouice service
-kitchen->invoice: PUT
-else Get tab from /table server
-kitchen->table: UPDATE -- update
-
-end
+kitchen->table: UPDATE -- update -- set item status to delivered
 
 @enduml
