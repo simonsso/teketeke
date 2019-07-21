@@ -13,14 +13,14 @@ use std::{thread, time};
 fn hw() ->String{
     println!("HW start");
     let ten_sec = time::Duration::from_millis(10000);
-    thread::sleep(ten_sec);
+  //  thread::sleep(ten_sec);
     println!("HW done");
     "Hello, world!".to_string()
 }
 
 lazy_static!{
     // TODO verify the correctness of regexp in tests
-    static ref RE_TABLE_NUM: Regex = Regex::new(r"^/table/[\d+](/.*)$").unwrap();
+    static ref RE_TABLE_NUM: Regex = Regex::new(r"^/table/(\d+)(/.*)?$").unwrap();
 }
 
 
@@ -34,12 +34,52 @@ fn microservice_handler(req: Request<Body>) -> Response<Body> {
 
 fn microservice_handler_inner(uri:String,method:String) ->String{
     println!("{}:{}",method,uri);
+
+    let (table,path):(Option<u32>,Option<String>) =  match RE_TABLE_NUM.captures(&uri){
+        Some(m)=>{
+            // this is checked to be an integer
+            let tbl = m.get(1).unwrap().as_str().parse::<u32>().unwrap();
+            match m.get(2){
+                Some(argument) => {
+                         (Some(tbl),Some(argument.as_str().to_string()))
+                }
+                None => {
+                    (Some(tbl),None) 
+                }
+            }
+        }
+        None =>{
+            (None,None)
+        }
+    };
+    
+
+
+    match (method.as_ref(),table,path){
+        ("GET",Some(t),None) =>{
+            // GET all items for table t
+        }
+        ("GET",None,None) =>{
+            // Get all items
+        }
+        ("POST",Some(t),None) =>{
+            // Add some items to table order
+        }
+        ("DELETE",Some(t),path) =>{
+            // Remove something from table t
+        }
+        ("UPDATE",Some(t),path) =>{
+            // Change some object for instance when it is deliverd to table
+        }
+        _ =>{
+            // Unsupported operation
+        }
+    };
     hw()
 }
 
 fn main() {
-    
-    println!("Would you like to play a game?");
+    println!("Starting server port");
     let addr = ([127, 0, 0, 1], 8888).into();
 
     let handler = ||{service_fn_ok(|req| microservice_handler(req ))};
@@ -71,25 +111,37 @@ mod tests {
     // For now this must be tested at system level by usage.
      #[test]
     fn handler_test(){
-        let ans = microservice_handler_inner("/table/10", "GET");
-        //assert!(ans.body() , "Hello World");
+        let ans = microservice_handler_inner("/table/10".to_string(), "GET".to_string());
+        assert_eq!(ans , "GET");
 
-        let ans = microservice_handler_inner("/table","GET");
-        //assert!(*ans.body(), *"/");
+        let get = Request::new(Body::empty());
+        let ans = microservice_handler(get);
+
+        let dummy = Request::new(ans.body());
+        assert!(ans.status().as_u16() == 200);
     }
     #[test]
     fn check_regexp(){
-        let ans = RE_TABLE_NUM.captures("/table/100/open");
+        let ans = RE_TABLE_NUM.captures("/table/100");
 
         match ans
         {
             Some(m) =>{
-                println!("Match 1{}",m.get(1).unwrap());
-                println!("Match 1{}",m.get(1).unwrap());
+                assert_eq!( m.get(1).map_or("Unknown", |m| m.as_str()) , "100"  );
             }
             _ => {
                 assert!(false);
             }
         }
+        match RE_TABLE_NUM.captures("/table/100/open"){
+            Some(m) =>{
+                assert_eq!( m.get(1).map_or("Unknown", |m| m.as_str()) , "100"  );
+                assert_eq!( m.get(2).map_or("Unknown", |m| m.as_str()) , "/open"  );
+            }
+            _ => {
+                assert!(false);
+            }
+        }
+
     }
 }
