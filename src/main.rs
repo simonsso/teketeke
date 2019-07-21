@@ -4,12 +4,8 @@ use lazy_static::lazy_static;
 use hyper::service::service_fn;
 
 // added from example
-use std::io::{Error, ErrorKind};
-use std::fs;
-use std::path::Path;
+use std::io::{Error};
 use futures::{future, Future, Stream};
-use tokio::fs::File;
-
 use regex::Regex;
 
 
@@ -18,8 +14,8 @@ use std::{thread, time};
 // Function for emulating execution time and explore locking anc blocking
 fn hw() ->String{
     println!("HW start{:?}",thread::current().id() );
-    let ten_sec = time::Duration::from_millis(10000);
-    thread::sleep(ten_sec);
+    let ten_sec = time::Duration::from_millis(1000);
+    //thread::sleep(ten_sec);
     println!("HW done {:?}",thread::current().id());
     "Hello, world!".to_string()
 }
