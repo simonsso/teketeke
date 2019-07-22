@@ -1,20 +1,28 @@
+//extern crate futures;
+//extern crate hyper;
+#[macro_use]
+extern crate serde_derive;
+extern crate serde_json;
+
 use hyper::{Body, Method, Request, Response, Server, StatusCode};
+use futures::{future, Future, Stream};
+// use hyper::{Body, Error, Method, Request, Response, Server, StatusCode};
 
 use hyper::service::service_fn;
 use lazy_static::lazy_static;
 
 // added from example
-use futures::{future, task, Future, Stream};
+//use futures::{future, /*task,*/ Future, Stream};
 use regex::Regex;
 use std::io::Error;
 
-use std::{thread, time};
+// use std::{thread, time};
 
-use future::{err, ok};
-use futures::future::lazy;
+// use future::{err, ok};
+// use futures::future::lazy;
 use futures::task::spawn;
 use futures_locks::RwLock;
-use tokio::timer::Interval;
+//use tokio::timer::Interval;
 
 #[derive(Copy, Clone)]
 enum States {
@@ -33,6 +41,20 @@ struct Datastore {
     vault: Vec<RwLock<Record>>,
 }
 
+// #[derive(Serialize)]
+// struct TableRequest{
+//     itemname:String,
+//     qty:i32,
+// }
+#[derive(Deserialize)]
+#[serde(tag = "distribution", content = "parameters", rename_all = "lowercase")]
+enum TableRequest {
+    order {
+        itemname: String,
+        qty: i32,
+    }
+}
+
 fn DatastoreRwLock() -> RwLock<Datastore> {
     let v: Vec<RwLock<Record>> = Vec::with_capacity(100);
     let d: Datastore = Datastore { vault: v };
@@ -42,7 +64,7 @@ fn DatastoreRwLock() -> RwLock<Datastore> {
 lazy_static! {
     // TODO verify the correctness of regexp in tests
     static ref RE_TABLE_NUM: Regex = Regex::new(r"^/table/(\d+)(/.*)?$").unwrap();
-    static ref STORAGE:RwLock::<Datastore> = DatastoreRwLock();
+    static ref STORAGE:RwLock<Datastore> = DatastoreRwLock();
 }
 
 // Encapsulate response for hyper
@@ -80,7 +102,33 @@ fn microservice_handler(
             // Get all items
         }
         ("POST", Some(t), None) => {
-            println!("Hello post {} here", t);
+             println!("Hello post {}  here", t);
+
+            let ans = {
+                let body = req.into_body().concat2()
+                    .map(|chunks| {
+                        let res = serde_json::from_slice::<TableRequest>(chunks.as_ref())
+                          //  .map(handle_request)
+                          //  .and_then(|resp| serde_json::to_string(&resp))
+                          ;
+                        match res {
+                            Ok(body) => {
+                                // println!("{:?} {}",body.itemname,body.qty);
+                                Response::new("body.into()".to_string())
+                            },
+                            Err(err) => {
+                                Response::builder()
+                                    .status(StatusCode::UNPROCESSABLE_ENTITY)
+                                    .body(err.to_string().into())
+                                    .unwrap()
+                            },
+                        }
+                    }
+                );
+//            Box::new(body);
+            };
+            //println!("{:?}",body);
+            
             // Add some items to table order
             let r = Record {
                 id: t,
