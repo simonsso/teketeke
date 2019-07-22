@@ -7,11 +7,12 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-futures = "0.1"
 hyper = "0.12.33"
 regex = "1.1.0"
 lazy_static = "1.0"
 tokio = "0.1"
+futures = "0.1.28"
+futures-locks = "0.3.3"
 # TODO expect to need theesee
 # hyper-staticfile = "0.3"
 # serde = "1.0"
