@@ -3,7 +3,6 @@ use hyper::{Body, Method, Request, Response, Server, StatusCode};
 use hyper::service::service_fn;
 use lazy_static::lazy_static;
 
-use std::sync::Arc;
 // added from example
 use futures::{future, task, Future, Stream};
 use regex::Regex;
@@ -38,13 +37,6 @@ fn DatastoreRwLock() -> RwLock<Datastore> {
     let v: Vec<RwLock<Record>> = Vec::with_capacity(100);
     let d: Datastore = Datastore { vault: v };
     RwLock::new(d)
-}
-
-// Function for emulating execution time and explore locking anc blocking
-fn hw() -> String {
-    println!("HW start{:?}", thread::current().id());
-    println!("HW done {:?}", thread::current().id());
-    "Hello, world!".to_string()
 }
 
 lazy_static! {
@@ -134,32 +126,11 @@ fn main() {
 mod tests {
     use super::*;
 
-    #[test]
-    fn it_works() {
-        assert_eq!("Hello, world!", hw());
-    }
-    #[test]
-    #[should_panic]
-    fn ne_it_works() {
-        assert_eq!("Hello, WORLD!", hw());
-    }
-
     // TODO/Note add unit test on handler level, when there is time to add
     // a request struct and check the response struct. Have to figure out
     // how to achive this.
     //
     // For now this must be tested at system level by usage.
-    #[test]
-    fn handler_test() {
-        let ans = microservice_handler_inner("/table/10".to_string(), "GET".to_string());
-        assert_eq!(ans, "GET");
-
-        let get = Request::new(Body::empty());
-        let ans = microservice_handler(get);
-
-        let dummy = Request::new(ans.body());
-        assert!(ans.status().as_u16() == 200);
-    }
     #[test]
     fn check_regexp() {
         let ans = RE_TABLE_NUM.captures("/table/100");
