@@ -31,11 +31,11 @@ struct Record{
 }
 
 struct Datastore{
-    vault: Vec<RwLock<Record>>,
+    vault: Vec<RwLock::<Record>>,
 }
 
-fn DatastoreRwLock()->RwLock<Datastore>{
-    let v:Vec<RwLock<Record>> = Vec::with_capacity(100);
+fn DatastoreRwLock()->RwLock::<Datastore>{
+    let v:Vec<RwLock::<Record>> = Vec::with_capacity(100);
     let d:Datastore = Datastore{vault : v};
     RwLock::new(d)
 }
@@ -51,7 +51,7 @@ fn hw() ->String{
 lazy_static!{
     // TODO verify the correctness of regexp in tests
     static ref RE_TABLE_NUM: Regex = Regex::new(r"^/table/(\d+)(/.*)?$").unwrap();
-    static ref STORAGE:RwLock<Datastore> = DatastoreRwLock();
+    static ref STORAGE:RwLock::<Datastore> = DatastoreRwLock();
 }
 
 
@@ -81,15 +81,13 @@ fn microservice_handler(req: Request<Body>) -> Box<Future<Item=Response<Body>, E
     match (method.as_ref(),table,path){
         ("GET",Some(t),None) =>{
             // GET all items for table t
-            let lock = STORAGE.read().map(|guard| { *guard });
-            let mut v = spawn(lock).wait_future().unwrap().vault;
+            let lock = STORAGE.read();
+            let v = &spawn(lock).wait_future().unwrap().vault;
             match v.get(t as usize) {
-                Some(x) => {
+                Some(_x) => {
                     println!("Found Gold in {}",t);
                 }
                 None =>{
-                    let r = Record{id:t, state: States::ETA(t) };
-                    v.push(RwLock::new(r));
                 }
 
             }
@@ -98,7 +96,15 @@ fn microservice_handler(req: Request<Body>) -> Box<Future<Item=Response<Body>, E
             // Get all items
         }
         ("POST",Some(t),None) =>{
+            println!("Hello post {} here", t);
             // Add some items to table order
+            let r = Record{id:t, state: States::ETA(t) };
+            let lock = STORAGE.write().map(|mut guard|{
+                (*guard).vault.push(RwLock::new(r));
+            });
+            let v = spawn(lock).wait_future();
+            
+            println!("bye bye {}",t);
         }
         ("DELETE",Some(t),path) =>{
             // Remove something from table t
