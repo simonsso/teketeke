@@ -1,122 +1,117 @@
-use hyper::{Body, Response, Server, Request, StatusCode, Method};
+use hyper::{Body, Method, Request, Response, Server, StatusCode};
 
-use lazy_static::lazy_static;
 use hyper::service::service_fn;
+use lazy_static::lazy_static;
 
 use std::sync::Arc;
 // added from example
-use std::io::{Error};
-use futures::{future, Future, Stream, task};
+use futures::{future, task, Future, Stream};
 use regex::Regex;
+use std::io::Error;
 
 use std::{thread, time};
 
-use futures_locks::RwLock;
-use tokio::timer::Interval;
+use future::{err, ok};
 use futures::future::lazy;
 use futures::task::spawn;
-use future::{err, ok};
+use futures_locks::RwLock;
+use tokio::timer::Interval;
 
 #[derive(Copy, Clone)]
-enum States{
+enum States {
     ETA(u32),
     DONE,
     REMOVED,
     EMPTY,
 }
 
-struct Record{
+struct Record {
     id: u32,
     state: States,
 }
 
-struct Datastore{
-    vault: Vec<RwLock::<Record>>,
+struct Datastore {
+    vault: Vec<RwLock<Record>>,
 }
 
-fn DatastoreRwLock()->RwLock::<Datastore>{
-    let v:Vec<RwLock::<Record>> = Vec::with_capacity(100);
-    let d:Datastore = Datastore{vault : v};
+fn DatastoreRwLock() -> RwLock<Datastore> {
+    let v: Vec<RwLock<Record>> = Vec::with_capacity(100);
+    let d: Datastore = Datastore { vault: v };
     RwLock::new(d)
 }
 
-
 // Function for emulating execution time and explore locking anc blocking
-fn hw() ->String{
-    println!("HW start{:?}",thread::current().id() );
-    println!("HW done {:?}",thread::current().id());
+fn hw() -> String {
+    println!("HW start{:?}", thread::current().id());
+    println!("HW done {:?}", thread::current().id());
     "Hello, world!".to_string()
 }
 
-lazy_static!{
+lazy_static! {
     // TODO verify the correctness of regexp in tests
     static ref RE_TABLE_NUM: Regex = Regex::new(r"^/table/(\d+)(/.*)?$").unwrap();
     static ref STORAGE:RwLock::<Datastore> = DatastoreRwLock();
 }
 
-
 // Encapsulate response for hyper
-fn microservice_handler(req: Request<Body>) -> Box<Future<Item=Response<Body>, Error=Error> + Send> {
-    let uri:String = req.uri().to_string();
+fn microservice_handler(
+    req: Request<Body>,
+) -> Box<Future<Item = Response<Body>, Error = Error> + Send> {
+    let uri: String = req.uri().to_string();
     let method = req.method().to_string();
-    
-    let (table,path):(Option<u32>,Option<String>) =  match RE_TABLE_NUM.captures(&uri){
-        Some(m)=>{
+
+    let (table, path): (Option<u32>, Option<String>) = match RE_TABLE_NUM.captures(&uri) {
+        Some(m) => {
             // this is checked to be an integer
             let tbl = m.get(1).unwrap().as_str().parse::<u32>().unwrap();
-            match m.get(2){
-                Some(argument) => {
-                         (Some(tbl),Some(argument.as_str().to_string()))
-                }
-                None => {
-                    (Some(tbl),None) 
-                }
+            match m.get(2) {
+                Some(argument) => (Some(tbl), Some(argument.as_str().to_string())),
+                None => (Some(tbl), None),
             }
         }
-        None =>{
-            (None,None)
-        }
+        None => (None, None),
     };
-    
-    match (method.as_ref(),table,path){
-        ("GET",Some(t),None) =>{
+
+    match (method.as_ref(), table, path) {
+        ("GET", Some(t), None) => {
             // GET all items for table t
             let lock = STORAGE.read();
             let v = &spawn(lock).wait_future().unwrap().vault;
             match v.get(t as usize) {
                 Some(_x) => {
-                    println!("Found Gold in {}",t);
+                    println!("Found Gold in {}", t);
                 }
-                None =>{
-                }
-
+                None => {}
             }
         }
-        ("GET",None,None) =>{
+        ("GET", None, None) => {
             // Get all items
         }
-        ("POST",Some(t),None) =>{
+        ("POST", Some(t), None) => {
             println!("Hello post {} here", t);
             // Add some items to table order
-            let r = Record{id:t, state: States::ETA(t) };
-            let lock = STORAGE.write().map(|mut guard|{
+            let r = Record {
+                id: t,
+                state: States::ETA(t),
+            };
+            let lock = STORAGE.write().map(|mut guard| {
                 (*guard).vault.push(RwLock::new(r));
             });
             let v = spawn(lock).wait_future();
-            
-            println!("bye bye {}",t);
+
+            println!("bye bye {}", t);
         }
-        ("DELETE",Some(t),path) =>{
+        ("DELETE", Some(t), path) => {
             // Remove something from table t
         }
-        ("UPDATE",Some(t),path) =>{
+        ("UPDATE", Some(t), path) => {
             // Change some object for instance when it is deliverd to table
         }
-        _ =>{
+        _ => {
             // Unsupported operation
         }
     };
-    
+
     let ans = "TODO Chnage me";
     let resp = Response::builder()
         .status(200)
@@ -129,11 +124,7 @@ fn main() {
     println!("Starting server port");
     let addr = ([127, 0, 0, 1], 8888).into();
 
-    let server = Server::bind(&addr).serve(||{
-        service_fn(move |req|{
-                microservice_handler(req)
-            }
-        )});
+    let server = Server::bind(&addr).serve(|| service_fn(move |req| microservice_handler(req)));
 
     let server = server.map_err(drop);
     hyper::rt::run(server);
@@ -145,12 +136,12 @@ mod tests {
 
     #[test]
     fn it_works() {
-        assert_eq!("Hello, world!" , hw());
+        assert_eq!("Hello, world!", hw());
     }
     #[test]
     #[should_panic]
     fn ne_it_works() {
-        assert_eq!("Hello, WORLD!" , hw());
+        assert_eq!("Hello, WORLD!", hw());
     }
 
     // TODO/Note add unit test on handler level, when there is time to add
@@ -158,10 +149,10 @@ mod tests {
     // how to achive this.
     //
     // For now this must be tested at system level by usage.
-     #[test]
-    fn handler_test(){
+    #[test]
+    fn handler_test() {
         let ans = microservice_handler_inner("/table/10".to_string(), "GET".to_string());
-        assert_eq!(ans , "GET");
+        assert_eq!(ans, "GET");
 
         let get = Request::new(Body::empty());
         let ans = microservice_handler(get);
@@ -170,27 +161,25 @@ mod tests {
         assert!(ans.status().as_u16() == 200);
     }
     #[test]
-    fn check_regexp(){
+    fn check_regexp() {
         let ans = RE_TABLE_NUM.captures("/table/100");
 
-        match ans
-        {
-            Some(m) =>{
-                assert_eq!( m.get(1).map_or("Unknown", |m| m.as_str()) , "100"  );
+        match ans {
+            Some(m) => {
+                assert_eq!(m.get(1).map_or("Unknown", |m| m.as_str()), "100");
             }
             _ => {
                 assert!(false);
             }
         }
-        match RE_TABLE_NUM.captures("/table/100/open"){
-            Some(m) =>{
-                assert_eq!( m.get(1).map_or("Unknown", |m| m.as_str()) , "100"  );
-                assert_eq!( m.get(2).map_or("Unknown", |m| m.as_str()) , "/open"  );
+        match RE_TABLE_NUM.captures("/table/100/open") {
+            Some(m) => {
+                assert_eq!(m.get(1).map_or("Unknown", |m| m.as_str()), "100");
+                assert_eq!(m.get(2).map_or("Unknown", |m| m.as_str()), "/open");
             }
             _ => {
                 assert!(false);
             }
         }
-
     }
 }
