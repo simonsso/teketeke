@@ -140,7 +140,7 @@ fn microservice_handler(
         }
         ("POST", None, None) => {
             println!("Hello post empty post here");
-            let resp = Response::builder().status(200).body(req.into_body()).unwrap();
+            let resp = Response::builder().status(501).body(req.into_body()).unwrap();
             return Box::new(future::ok(resp));
         }
         ("POST", Some(table), None) => {
@@ -149,7 +149,6 @@ fn microservice_handler(
             let v = &spawn(lock).wait_future().unwrap().vault;
             match v.get(table as usize) {
                 Some(x) => {
-                    println!("Found Gold in {}", table);
                     return table_add_items(req.into_body(),table);
                 }
                 None => {
@@ -164,6 +163,8 @@ fn microservice_handler(
         }
         ("DELETE", Some(t), path) => {
             // Remove something from table t
+
+            //Todo find a way to identify items in table tab... maybe with id
         }
         ("UPDATE", Some(t), path) => {
             // Change some object for instance when it is deliverd to table
@@ -173,9 +174,9 @@ fn microservice_handler(
         }
     };
 
-    let ans = "TODO Chnage me";
+    let ans = "Not implemented";
     let resp = Response::builder()
-        .status(200)
+        .status(501)
         .body(Body::from(ans))
         .unwrap();
     Box::new(future::ok(resp))
@@ -187,10 +188,8 @@ fn table_add_items(body: Body,table:u32) -> Box<Future<Item = Response<Body>, Er
         let res = serde_json::from_slice::<TableRequestVec>(chunks.as_ref())
             .map(|t| {slurp_vector(table, t.tab )} )
             .and_then(|resp| serde_json::to_string(&resp));
-        println!("Ok Somethuing {:?}", res);
         match res {
             Ok(body) => {
-                println!("Ok Somethuing {:?}", body);
                 Response::new(body.into())
             }
             Err(err) => Response::builder()
