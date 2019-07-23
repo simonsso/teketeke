@@ -14,7 +14,6 @@ use lazy_static::lazy_static;
 // added from example
 //use futures::{future, /*task,*/ Future, Stream};
 use regex::Regex;
-use std::io::Error;
 
 // use std::{thread, time};
 
@@ -23,6 +22,7 @@ use std::io::Error;
 use futures::task::spawn;
 use futures_locks::RwLock;
 //use tokio::timer::Interval;
+use hyper::error::Error;
 
 #[derive(Copy, Clone)]
 enum States {
@@ -46,7 +46,7 @@ struct Datastore {
 //     itemname:String,
 //     qty:i32,
 // }
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone,Serialize)]
 #[serde(tag = "distribution", content = "parameters", rename_all = "lowercase")]
 enum TableRequest {
     order {
@@ -55,6 +55,14 @@ enum TableRequest {
     }
 }
 
+impl std::fmt::Debug for TableRequest{
+  fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            TableRequest::order{itemname,qty} => write!(f, "{} {}", itemname, qty),
+            _ => write!{f,""}
+        }
+    }
+}
 fn DatastoreRwLock() -> RwLock<Datastore> {
     let v: Vec<RwLock<Record>> = Vec::with_capacity(100);
     let d: Datastore = Datastore { vault: v };
@@ -101,34 +109,48 @@ fn microservice_handler(
         ("GET", None, None) => {
             // Get all items
         }
+        ("POST", None, None) => {
+            println!("Hello post empty post here");
+            let resp = Response::builder()
+                    .status(200)
+                    .body(req.into_body())
+                    .unwrap();
+            return Box::new(future::ok(resp))
+        }
         ("POST", Some(t), None) => {
              println!("Hello post {}  here", t);
 
-            let ans = {
-                let body = req.into_body().concat2()
-                    .map(|chunks| {
-                        let res = serde_json::from_slice::<TableRequest>(chunks.as_ref())
-                          //  .map(handle_request)
-                          //  .and_then(|resp| serde_json::to_string(&resp))
-                          ;
-                        match res {
-                            Ok(body) => {
-                                // println!("{:?} {}",body.itemname,body.qty);
-                                Response::new("body.into()".to_string())
-                            },
-                            Err(err) => {
-                                Response::builder()
-                                    .status(StatusCode::UNPROCESSABLE_ENTITY)
-                                    .body(err.to_string().into())
-                                    .unwrap()
-                            },
-                        }
+            let resp = req.into_body().concat2()
+                .map(|chunks| {
+                    println!("DATA: {:?}",chunks.as_ref());
+                    let res = serde_json::from_slice::<TableRequest>(chunks.as_ref())
+                        //  .map(handle_request)
+                        .and_then(|resp| serde_json::to_string(&resp))
+                        ;
+                    println!("Ok Somethuing {:?}",res);
+                    match res {
+                        Ok(body) => {
+                            println!("Ok Somethuing {:?}",body);
+                            Response::new(body.into())
+                        },
+                        Err(err) => {
+                            Response::builder()
+                                .status(StatusCode::UNPROCESSABLE_ENTITY)
+                                .body(err.to_string().into())
+                                .unwrap()
+                        },
                     }
-                );
-//            Box::new(body);
-            };
+                }
+            );
+
+            // println!("Body future wait start");
+            //match spawn(body).wait_future(){
+            //    _ => println!("Body future wait")
+            //}
+            //Box::new(body);
+
             //println!("{:?}",body);
-            
+
             // Add some items to table order
             let r = Record {
                 id: t,
@@ -140,6 +162,7 @@ fn microservice_handler(
             let v = spawn(lock).wait_future();
 
             println!("bye bye {}", t);
+            return Box::new(resp)
         }
         ("DELETE", Some(t), path) => {
             // Remove something from table t
