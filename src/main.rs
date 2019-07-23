@@ -44,12 +44,6 @@ struct Datastore {
     vault: Vec<RwLock<Vec<Record>>>,
 }
 
-// #[derive(Serialize)]
-// struct TableRequest{
-//     itemname:String,
-//     qty:i32,
-// }
-
 #[derive(Deserialize, Clone, Serialize)]
 struct TableRequestVec {
     tab: Vec<TableRequest>,
@@ -81,7 +75,7 @@ fn DatastoreRwLock(num: usize) -> RwLock<Datastore> {
 lazy_static! {
     // TODO verify the correctness of regexp in tests
     static ref RE_TABLE_NUM: Regex = Regex::new(r"^/table/(\d+)(/.*)?$").unwrap();
-    static ref STORAGE:RwLock<Datastore> = DatastoreRwLock(10);
+    static ref STORAGE:RwLock<Datastore> = DatastoreRwLock(100);  //TODO init with 100 tables this should be done on demand instead
 }
 
 // Encapsulate response for hyper
@@ -91,6 +85,7 @@ fn microservice_handler(
     let uri: String = req.uri().to_string();
     let method = req.method().to_string();
 
+    // Parse request URL with stored Regexp
     let (table, path): (Option<u32>, Option<String>) = match RE_TABLE_NUM.captures(&uri) {
         Some(m) => {
             // this is checked to be an integer
@@ -110,21 +105,22 @@ fn microservice_handler(
             println!("Hello GET {}  here", table);
             match get_all(table) {
                 ApiResult::Ok(s) => {
-                    let resp = Response::builder().status(200).body(Body::from(s)).unwrap();
-                    return Box::new(future::ok(resp));
+                    return Box::new(future::ok(
+                        Response::builder().status(200).body(Body::from(s)).unwrap(),
+                    ));
                 }
                 ApiResult::Err(code, s) => {
-                    let resp = Response::builder()
-                        .status(code)
-                        .body(Body::from(s))
-                        .unwrap();
-                    return Box::new(future::ok(resp));
+                    return Box::new(future::ok(
+                        Response::builder()
+                            .status(code)
+                            .body(Body::from(s))
+                            .unwrap(),
+                    ));
                 }
             }
         }
         ("GET", None, None) => {
             // Get all items
-            println!("GET");
             let comma: String = ",".to_string();
             let lock = STORAGE.read();
             let v = &spawn(lock).wait_future().unwrap().vault;
@@ -138,6 +134,7 @@ fn microservice_handler(
                         bodychunks.push(comma.clone())
                     }
                     ApiResult::Err(code, msg) => {
+                        //TODO This should not occour
                         println!("Enexpected error fetcing all data {} {} {}", i, code, msg);
                     }
                 }
@@ -152,7 +149,6 @@ fn microservice_handler(
             return Box::new(future::ok(resp));
         }
         ("POST", None, None) => {
-            println!("Hello post empty post here");
             let resp = Response::builder()
                 .status(501)
                 .body(req.into_body())
@@ -168,11 +164,12 @@ fn microservice_handler(
                 }
                 None => {
                     let err = "I am a tea pot Error: this table is not allocate - build a bigger restaurant";
-                    let resp = Response::builder()
-                        .status(418)
-                        .body(Body::from(err))
-                        .unwrap();
-                    return Box::new(future::ok(resp));
+                    return Box::new(future::ok(
+                        Response::builder()
+                            .status(418)
+                            .body(Body::from(err))
+                            .unwrap(),
+                    ));
                 }
             }
         }
