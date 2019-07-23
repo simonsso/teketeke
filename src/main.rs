@@ -5,6 +5,7 @@ extern crate serde_derive;
 extern crate serde_json;
 extern crate hyper;
 
+use std::borrow::Borrow;
 use futures::{future, Future, Stream};
 use hyper::{Body, Method, Request, Response, Server, StatusCode};
 // use hyper::{Body, Error, Method, Request, Response, Server, StatusCode};
@@ -28,14 +29,15 @@ use hyper::error::Error;
 #[derive(Copy, Clone)]
 enum States {
     ETA(u32),
-    DONE,
-    REMOVED,
+    DELIVERD,
     EMPTY,
 }
 
 struct Record {
+    itemname:String,
     id: u32,
     state: States,
+    qty:i32,
 }
 
 struct Datastore {
@@ -111,10 +113,7 @@ fn microservice_handler(
         }
         ("POST", None, None) => {
             println!("Hello post empty post here");
-            let resp = Response::builder()
-                .status(200)
-                .body(req.into_body())
-                .unwrap();
+            let resp = Response::builder().status(200).body(req.into_body()).unwrap();
             return Box::new(future::ok(resp));
         }
         ("POST", Some(table), None) => {
@@ -157,20 +156,9 @@ fn microservice_handler(
 }
 
 fn table_add_items(body: Body,table:u32) -> Box<Future<Item = Response<Body>, Error = Error> + Send> {
-
-    let resp = body.concat2().map(|chunks| {
-            // let r = Record {
-            //     id: t,
-            //     state: States::ETA(t),
-            // };
-            // let lock = STORAGE.write().map(|mut guard| {
-            //     (*guard).vault.push(RwLock::new(r));
-            // });
-            // let v = spawn(lock).wait_future();
-        
+    let resp = body.concat2().map(move|chunks| {
         let res = serde_json::from_slice::<TableRequestVec>(chunks.as_ref())
-            // .map(handle_request)
-            .map(|t| t)
+            .map(|t| {slurp_vector(table, t.tab )} )
             .and_then(|resp| serde_json::to_string(&resp));
         println!("Ok Somethuing {:?}", res);
         match res {
@@ -185,6 +173,33 @@ fn table_add_items(body: Body,table:u32) -> Box<Future<Item = Response<Body>, Er
         }
     });
     Box::new(resp)
+}
+
+fn slurp_vector(table:u32, v:Vec<TableRequest>)-> u32{
+    let mut target:Vec<Record> = Vec::with_capacity(v.len());
+    println!("{}",v.len());
+    for i in v{
+        let timetocook = 60*5;
+        match i {
+            TableRequest::order { itemname, qty } => target.push(Record{ itemname:itemname,
+                                                                        id:0,
+                                                                        qty:qty,
+                                                                        state: States::ETA(timetocook),
+                                                                        })        
+        }
+    }
+
+    // Get lock for data store
+    let outerlock = STORAGE.read().map( |outer|{
+            //            let d = *outer.vault;
+            // range check done is outside
+            let innerlock = (*outer).vault[table as usize].write().map(  |mut inner|{
+                (*inner).append(& mut target);
+            });
+            spawn(innerlock).wait_future();
+    });
+    spawn(outerlock).wait_future();
+    0
 }
 
 fn main() {

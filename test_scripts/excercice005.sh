@@ -8,5 +8,5 @@ function send_request() {
     echo ""
 }
 
-send_request '{"tab":[{"order": "order", "parameters": { "itemname": "MTIzNDU2Nzg5MA==","qty" : 100 }},{"order": "order", "parameters": { "itemname": "MTIzNDU2Nzg5MA==","qty" : 100 } }]}'
+send_request '{"tab":[{"order": "order", "parameters": { "itemname": "Coffe","qty" : 4 }},{"order": "order", "parameters": { "itemname": "Mayonaise","qty" : 10 } }]}'
 
