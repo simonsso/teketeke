@@ -108,15 +108,12 @@ fn microservice_handler(
             // GET all items for table t
             let table = table as usize;
             println!("Hello GET {}  here", table);
-            match get_all(table){
-                ApiResult::Ok(s) =>{
-                    let resp = Response::builder()
-                        .status(200)
-                        .body(Body::from(s))
-                        .unwrap();
+            match get_all(table) {
+                ApiResult::Ok(s) => {
+                    let resp = Response::builder().status(200).body(Body::from(s)).unwrap();
                     return Box::new(future::ok(resp));
                 }
-                ApiResult::Err(code,s) =>{
+                ApiResult::Err(code, s) => {
                     let resp = Response::builder()
                         .status(code)
                         .body(Body::from(s))
@@ -124,33 +121,35 @@ fn microservice_handler(
                     return Box::new(future::ok(resp));
                 }
             }
-       
         }
         ("GET", None, None) => {
             // Get all items
             println!("GET");
+            let comma: String = ",".to_string();
             let lock = STORAGE.read();
             let v = &spawn(lock).wait_future().unwrap().vault;
-             
-             let mut body:String = String::new();
-            for i in 0..v.len(){
-                println!("GE {}",i);
 
-                match get_all(i){
-                    ApiResult::Ok(s) =>{
-                        body += &s;
+            let mut bodychunks: Vec<String> = Vec::new();
+            bodychunks.push("[".to_string());
+            for i in 0..v.len() {
+                match get_all(i) {
+                    ApiResult::Ok(s) => {
+                        bodychunks.push(s);
+                        bodychunks.push(comma.clone())
                     }
-                    ApiResult::Err(code,msg) =>{
-                        println!("Enexpected error fetcing all data {} {} {}",i,code,msg);
+                    ApiResult::Err(code, msg) => {
+                        println!("Enexpected error fetcing all data {} {} {}", i, code, msg);
                     }
                 }
             }
-            let resp = Response::builder()
-                .status(200)
-                .body(Body::from(body))
-                .unwrap();
+            if bodychunks.last() == Some(&comma) {
+                bodychunks.pop();
+            }
+            bodychunks.push("]".to_string());
+            let stream = futures::stream::iter_ok::<_, ::std::io::Error>(bodychunks);
+            let body = Body::wrap_stream(stream);
+            let resp = Response::builder().status(200).body(body).unwrap();
             return Box::new(future::ok(resp));
-
         }
         ("POST", None, None) => {
             println!("Hello post empty post here");
@@ -161,7 +160,6 @@ fn microservice_handler(
             return Box::new(future::ok(resp));
         }
         ("POST", Some(table), None) => {
-            println!("Hello post {}  here", table);
             let lock = STORAGE.read();
             let v = &spawn(lock).wait_future().unwrap().vault;
             match v.get(table as usize) {
@@ -199,12 +197,12 @@ fn microservice_handler(
     Box::new(future::ok(resp))
 }
 
-enum ApiResult<T>{
+enum ApiResult<T> {
     Ok(T),
-    Err(u16,String),
+    Err(u16, String),
 }
 
-fn get_all(table:usize)->ApiResult<String>{
+fn get_all(table: usize) -> ApiResult<String> {
     let lock = STORAGE.read();
     let v = &spawn(lock).wait_future().unwrap().vault;
     match v.get(table) {
@@ -219,11 +217,12 @@ fn get_all(table:usize)->ApiResult<String>{
             let bodytext: String = serde_json::to_string(&table_vec).unwrap();
             ApiResult::Ok(bodytext)
         }
-        None => {
-            ApiResult::Err(418,"I am a tea pot Error: this table is not allocate - build a bigger restaurant".to_string() )
-        }
+        None => ApiResult::Err(
+            418,
+            "I am a tea pot Error: this table is not allocate - build a bigger restaurant"
+                .to_string(),
+        ),
     }
-
 }
 
 fn table_add_items(
@@ -273,7 +272,7 @@ fn slurp_vector(table: u32, v: Vec<TableRequest>) -> u32 {
 }
 
 fn main() {
-    println!("Starting server port");
+    println!("Starting server port at http://localhost:8888/");
     let addr = ([127, 0, 0, 1], 8888).into();
 
     let server = Server::bind(&addr).serve(|| service_fn(move |req| microservice_handler(req)));
