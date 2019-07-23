@@ -3,6 +3,7 @@
 #[macro_use]
 extern crate serde_derive;
 extern crate serde_json;
+extern crate hyper;
 
 use futures::{future, Future, Stream};
 use hyper::{Body, Method, Request, Response, Server, StatusCode};
@@ -38,7 +39,7 @@ struct Record {
 }
 
 struct Datastore {
-    vault: Vec<RwLock<Record>>,
+    vault: Vec<RwLock<Vec<Record>>>,
 }
 
 // #[derive(Serialize)]
@@ -66,8 +67,11 @@ impl std::fmt::Debug for TableRequest {
         }
     }
 }
-fn DatastoreRwLock() -> RwLock<Datastore> {
-    let v: Vec<RwLock<Record>> = Vec::with_capacity(100);
+fn DatastoreRwLock(num:usize) -> RwLock<Datastore> {
+    let mut v: Vec<RwLock<Vec<Record>>> = Vec::with_capacity(100);
+    for _ in 0..num {
+        v.push(RwLock::new(Vec::new()))
+    }
     let d: Datastore = Datastore { vault: v };
     RwLock::new(d)
 }
@@ -75,7 +79,7 @@ fn DatastoreRwLock() -> RwLock<Datastore> {
 lazy_static! {
     // TODO verify the correctness of regexp in tests
     static ref RE_TABLE_NUM: Regex = Regex::new(r"^/table/(\d+)(/.*)?$").unwrap();
-    static ref STORAGE:RwLock<Datastore> = DatastoreRwLock();
+    static ref STORAGE:RwLock<Datastore> = DatastoreRwLock(10);
 }
 
 // Encapsulate response for hyper
@@ -100,14 +104,7 @@ fn microservice_handler(
     match (method.as_ref(), table, path) {
         ("GET", Some(t), None) => {
             // GET all items for table t
-            let lock = STORAGE.read();
-            let v = &spawn(lock).wait_future().unwrap().vault;
-            match v.get(t as usize) {
-                Some(_x) => {
-                    println!("Found Gold in {}", t);
-                }
-                None => {}
-            }
+         
         }
         ("GET", None, None) => {
             // Get all items
@@ -120,48 +117,25 @@ fn microservice_handler(
                 .unwrap();
             return Box::new(future::ok(resp));
         }
-        ("POST", Some(t), None) => {
-            println!("Hello post {}  here", t);
-
-            let resp = req.into_body().concat2().map(|chunks| {
-                println!("DATA: {:?}", chunks.as_ref());
-                let res = serde_json::from_slice::<TableRequestVec>(chunks.as_ref())
-                    // .map(handle_request)
-                    .map(|t| t)
-                    .and_then(|resp| serde_json::to_string(&resp));
-                println!("Ok Somethuing {:?}", res);
-                match res {
-                    Ok(body) => {
-                        println!("Ok Somethuing {:?}", body);
-                        Response::new(body.into())
-                    }
-                    Err(err) => Response::builder()
-                        .status(StatusCode::UNPROCESSABLE_ENTITY)
-                        .body(err.to_string().into())
-                        .unwrap(),
+        ("POST", Some(table), None) => {
+            println!("Hello post {}  here", table);
+            let lock = STORAGE.read();
+            let v = &spawn(lock).wait_future().unwrap().vault;
+            match v.get(table as usize) {
+                Some(x) => {
+                    println!("Found Gold in {}", table);
+                    return table_add_items(req.into_body(),table);
                 }
-            });
-
-            // println!("Body future wait start");
-            //match spawn(body).wait_future(){
-            //    _ => println!("Body future wait")
-            //}
-            //Box::new(body);
-
-            //println!("{:?}",body);
-
-            // Add some items to table order
-            let r = Record {
-                id: t,
-                state: States::ETA(t),
-            };
-            let lock = STORAGE.write().map(|mut guard| {
-                (*guard).vault.push(RwLock::new(r));
-            });
-            let v = spawn(lock).wait_future();
-
-            println!("bye bye {}", t);
-            return Box::new(resp);
+                None => {
+                    let err = "I am a tea pot Error: this table is not allocate - build a bigger restaurant";
+                    println!("{}",err);
+                let resp = Response::builder()
+                    .status(418)
+                    .body(Body::from(err))
+                    .unwrap();
+                return Box::new(future::ok(resp))
+                }
+            }
         }
         ("DELETE", Some(t), path) => {
             // Remove something from table t
@@ -180,6 +154,37 @@ fn microservice_handler(
         .body(Body::from(ans))
         .unwrap();
     Box::new(future::ok(resp))
+}
+
+fn table_add_items(body: Body,table:u32) -> Box<Future<Item = Response<Body>, Error = Error> + Send> {
+
+    let resp = body.concat2().map(|chunks| {
+            // let r = Record {
+            //     id: t,
+            //     state: States::ETA(t),
+            // };
+            // let lock = STORAGE.write().map(|mut guard| {
+            //     (*guard).vault.push(RwLock::new(r));
+            // });
+            // let v = spawn(lock).wait_future();
+        
+        let res = serde_json::from_slice::<TableRequestVec>(chunks.as_ref())
+            // .map(handle_request)
+            .map(|t| t)
+            .and_then(|resp| serde_json::to_string(&resp));
+        println!("Ok Somethuing {:?}", res);
+        match res {
+            Ok(body) => {
+                println!("Ok Somethuing {:?}", body);
+                Response::new(body.into())
+            }
+            Err(err) => Response::builder()
+                .status(StatusCode::UNPROCESSABLE_ENTITY)
+                .body(err.to_string().into())
+                .unwrap(),
+        }
+    });
+    Box::new(resp)
 }
 
 fn main() {
@@ -201,6 +206,27 @@ mod tests {
     // how to achive this.
     //
     // For now this must be tested at system level by usage.
+    #[test]
+    fn check_post_ans() {
+        let chunks = vec![ "hello"," ", "world",];
+        let stream = futures::stream::iter_ok::<_, ::std::io::Error>(chunks);
+        let body = Body::wrap_stream(stream);
+        let table:u32 = 1000;
+        let ans = table_add_items(body, table);
+        let r = spawn(ans).wait_future().unwrap();
+        assert!(r.status()==422);
+
+        let order = r#"{"tab":[{"order": "order", "parameters": { "itemname": "Edamame","qty" : 100 }},{"order": "order", "parameters": { "itemname": "Nama biru","qty" : 5 } }]}"#;
+        let chunks = vec![ order,];
+        let stream = futures::stream::iter_ok::<_, ::std::io::Error>(chunks);
+        let body = Body::wrap_stream(stream);
+        let table:u32 = 1;
+        let ans = table_add_items(body, table);
+        let r = spawn(ans).wait_future().unwrap();
+        assert!(r.status()==200);
+
+
+    }
     #[test]
     fn check_regexp() {
         let ans = RE_TABLE_NUM.captures("/table/100");
