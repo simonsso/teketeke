@@ -26,13 +26,13 @@ use futures_locks::RwLock;
 //use tokio::timer::Interval;
 use hyper::error::Error;
 
-#[derive(Copy, Clone)]
+#[derive(Copy,Deserialize, Clone, Serialize)]
 enum States {
     ETA(u32),
     DELIVERD,
     EMPTY,
 }
-
+#[derive(Deserialize, Clone, Serialize)]
 struct Record {
     itemname:String,
     id: u32,
@@ -104,9 +104,36 @@ fn microservice_handler(
     };
 
     match (method.as_ref(), table, path) {
-        ("GET", Some(t), None) => {
+        ("GET", Some(table), None) => {
             // GET all items for table t
-         
+            println!("Hello GET {}  here", table);
+            let lock = STORAGE.read();
+            let v = &spawn(lock).wait_future().unwrap().vault;
+            match v.get(table as usize) {
+                Some(x) => {
+                    // let vec_lock:RwLock<Vec<Record>> = *x;
+                    let read_lock = (*x).read();
+
+                    let x1= spawn(read_lock).wait_future().unwrap();
+                                                //sic!
+                    let table_vec:Vec<Record> = x1.to_vec();
+
+                    let bodytext:String = serde_json::to_string(&table_vec).unwrap();
+                    let resp = Response::builder()
+                        .status(200)
+                        .body(Body::from(bodytext))
+                        .unwrap();
+                    return Box::new(future::ok(resp))
+                }
+                None => {
+                    let err = "I am a tea pot Error: this table is not allocate - build a bigger restaurant";
+                let resp = Response::builder()
+                    .status(418)
+                    .body(Body::from(err))
+                    .unwrap();
+                return Box::new(future::ok(resp))
+                }
+            }
         }
         ("GET", None, None) => {
             // Get all items
@@ -127,7 +154,6 @@ fn microservice_handler(
                 }
                 None => {
                     let err = "I am a tea pot Error: this table is not allocate - build a bigger restaurant";
-                    println!("{}",err);
                 let resp = Response::builder()
                     .status(418)
                     .body(Body::from(err))
@@ -154,6 +180,7 @@ fn microservice_handler(
         .unwrap();
     Box::new(future::ok(resp))
 }
+
 
 fn table_add_items(body: Body,table:u32) -> Box<Future<Item = Response<Body>, Error = Error> + Send> {
     let resp = body.concat2().map(move|chunks| {
@@ -191,12 +218,11 @@ fn slurp_vector(table:u32, v:Vec<TableRequest>)-> u32{
 
     // Get lock for data store
     let outerlock = STORAGE.read().map( |outer|{
-            //            let d = *outer.vault;
             // range check done is outside
             let innerlock = (*outer).vault[table as usize].write().map(  |mut inner|{
                 (*inner).append(& mut target);
             });
-            spawn(innerlock).wait_future();
+            spawn(innerlock).wait_future()
     });
     spawn(outerlock).wait_future();
     0
