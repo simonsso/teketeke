@@ -106,37 +106,51 @@ fn microservice_handler(
     match (method.as_ref(), table, path) {
         ("GET", Some(table), None) => {
             // GET all items for table t
+            let table = table as usize;
             println!("Hello GET {}  here", table);
-            let lock = STORAGE.read();
-            let v = &spawn(lock).wait_future().unwrap().vault;
-            match v.get(table as usize) {
-                Some(x) => {
-                    // let vec_lock:RwLock<Vec<Record>> = *x;
-                    let read_lock = (*x).read();
-
-                    let x1 = spawn(read_lock).wait_future().unwrap();
-                    //sic!
-                    let table_vec: Vec<Record> = x1.to_vec();
-
-                    let bodytext: String = serde_json::to_string(&table_vec).unwrap();
+            match get_all(table){
+                ApiResult::Ok(s) =>{
                     let resp = Response::builder()
                         .status(200)
-                        .body(Body::from(bodytext))
+                        .body(Body::from(s))
                         .unwrap();
                     return Box::new(future::ok(resp));
                 }
-                None => {
-                    let err = "I am a tea pot Error: this table is not allocate - build a bigger restaurant";
+                ApiResult::Err(code,s) =>{
                     let resp = Response::builder()
-                        .status(418)
-                        .body(Body::from(err))
+                        .status(code)
+                        .body(Body::from(s))
                         .unwrap();
                     return Box::new(future::ok(resp));
                 }
             }
+       
         }
         ("GET", None, None) => {
             // Get all items
+            println!("GET");
+            let lock = STORAGE.read();
+            let v = &spawn(lock).wait_future().unwrap().vault;
+             
+             let mut body:String = String::new();
+            for i in 0..v.len(){
+                println!("GE {}",i);
+
+                match get_all(i){
+                    ApiResult::Ok(s) =>{
+                        body += &s;
+                    }
+                    ApiResult::Err(code,msg) =>{
+                        println!("Enexpected error fetcing all data {} {} {}",i,code,msg);
+                    }
+                }
+            }
+            let resp = Response::builder()
+                .status(200)
+                .body(Body::from(body))
+                .unwrap();
+            return Box::new(future::ok(resp));
+
         }
         ("POST", None, None) => {
             println!("Hello post empty post here");
@@ -183,6 +197,33 @@ fn microservice_handler(
         .body(Body::from(ans))
         .unwrap();
     Box::new(future::ok(resp))
+}
+
+enum ApiResult<T>{
+    Ok(T),
+    Err(u16,String),
+}
+
+fn get_all(table:usize)->ApiResult<String>{
+    let lock = STORAGE.read();
+    let v = &spawn(lock).wait_future().unwrap().vault;
+    match v.get(table) {
+        Some(x) => {
+            // let vec_lock:RwLock<Vec<Record>> = *x;
+            let read_lock = (*x).read();
+
+            let x1 = spawn(read_lock).wait_future().unwrap();
+            //sic!
+            let table_vec: Vec<Record> = x1.to_vec();
+
+            let bodytext: String = serde_json::to_string(&table_vec).unwrap();
+            ApiResult::Ok(bodytext)
+        }
+        None => {
+            ApiResult::Err(418,"I am a tea pot Error: this table is not allocate - build a bigger restaurant".to_string() )
+        }
+    }
+
 }
 
 fn table_add_items(
