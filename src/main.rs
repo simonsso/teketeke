@@ -4,8 +4,8 @@
 extern crate serde_derive;
 extern crate serde_json;
 
-use hyper::{Body, Method, Request, Response, Server, StatusCode};
 use futures::{future, Future, Stream};
+use hyper::{Body, Method, Request, Response, Server, StatusCode};
 // use hyper::{Body, Error, Method, Request, Response, Server, StatusCode};
 
 use hyper::service::service_fn;
@@ -46,20 +46,17 @@ struct Datastore {
 //     itemname:String,
 //     qty:i32,
 // }
-#[derive(Deserialize, Clone,Serialize)]
+#[derive(Deserialize, Clone, Serialize)]
 #[serde(tag = "order", content = "parameters", rename_all = "lowercase")]
 enum TableRequest {
-    order {
-        itemname: String,
-        qty: i32,
-    }
+    order { itemname: String, qty: i32 },
 }
 
-impl std::fmt::Debug for TableRequest{
-  fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl std::fmt::Debug for TableRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            TableRequest::order{itemname,qty} => write!(f, "{} {}", itemname, qty),
-            _ => write!{f,""}
+            TableRequest::order { itemname, qty } => write!(f, "{} {}", itemname, qty),
+            _ => write! {f,""},
         }
     }
 }
@@ -112,43 +109,37 @@ fn microservice_handler(
         ("POST", None, None) => {
             println!("Hello post empty post here");
             let resp = Response::builder()
-                    .status(200)
-                    .body(req.into_body())
-                    .unwrap();
-            return Box::new(future::ok(resp))
+                .status(200)
+                .body(req.into_body())
+                .unwrap();
+            return Box::new(future::ok(resp));
         }
         ("POST", Some(t), None) => {
-             println!("Hello post {}  here", t);
+            println!("Hello post {}  here", t);
 
-            let resp = req.into_body().concat2()
-                .map(|chunks| {
-                    println!("DATA: {:?}",chunks.as_ref());
-                    let res = serde_json::from_slice::<TableRequest>(chunks.as_ref())
-                        //  .map(handle_request)
-                        .map(|t|{
-                            match t {
-                                TableRequest::order{itemname,qty} => {
-                                    TableRequest::order{ itemname, qty:qty+2 }
-                                }
-                            }
-                        })
-                        .and_then(|resp| serde_json::to_string(&resp))
-                        ;
-                    println!("Ok Somethuing {:?}",res);
-                    match res {
-                        Ok(body) => {
-                            println!("Ok Somethuing {:?}",body);
-                            Response::new(body.into())
+            let resp = req.into_body().concat2().map(|chunks| {
+                println!("DATA: {:?}", chunks.as_ref());
+                let res = serde_json::from_slice::<TableRequest>(chunks.as_ref())
+                    //  .map(handle_request)
+                    .map(|t| match t {
+                        TableRequest::order { itemname, qty } => TableRequest::order {
+                            itemname,
+                            qty: qty + 2,
                         },
-                        Err(err) => {
-                            Response::builder()
-                                .status(StatusCode::UNPROCESSABLE_ENTITY)
-                                .body(err.to_string().into())
-                                .unwrap()
-                        },
+                    })
+                    .and_then(|resp| serde_json::to_string(&resp));
+                println!("Ok Somethuing {:?}", res);
+                match res {
+                    Ok(body) => {
+                        println!("Ok Somethuing {:?}", body);
+                        Response::new(body.into())
                     }
+                    Err(err) => Response::builder()
+                        .status(StatusCode::UNPROCESSABLE_ENTITY)
+                        .body(err.to_string().into())
+                        .unwrap(),
                 }
-            );
+            });
 
             // println!("Body future wait start");
             //match spawn(body).wait_future(){
@@ -169,7 +160,7 @@ fn microservice_handler(
             let v = spawn(lock).wait_future();
 
             println!("bye bye {}", t);
-            return Box::new(resp)
+            return Box::new(resp);
         }
         ("DELETE", Some(t), path) => {
             // Remove something from table t
