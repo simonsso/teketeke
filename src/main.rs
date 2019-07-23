@@ -47,7 +47,7 @@ struct Datastore {
 //     qty:i32,
 // }
 #[derive(Deserialize, Clone,Serialize)]
-#[serde(tag = "distribution", content = "parameters", rename_all = "lowercase")]
+#[serde(tag = "order", content = "parameters", rename_all = "lowercase")]
 enum TableRequest {
     order {
         itemname: String,
@@ -125,6 +125,13 @@ fn microservice_handler(
                     println!("DATA: {:?}",chunks.as_ref());
                     let res = serde_json::from_slice::<TableRequest>(chunks.as_ref())
                         //  .map(handle_request)
+                        .map(|t|{
+                            match t {
+                                TableRequest::order{itemname,qty} => {
+                                    TableRequest::order{ itemname, qty:qty+2 }
+                                }
+                            }
+                        })
                         .and_then(|resp| serde_json::to_string(&resp))
                         ;
                     println!("Ok Somethuing {:?}",res);
