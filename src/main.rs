@@ -46,11 +46,18 @@ struct Datastore {
 //     itemname:String,
 //     qty:i32,
 // }
+
+#[derive(Deserialize, Clone, Serialize)]
+struct TableRequestVec{
+    tab:Vec<TableRequest>,
+}
+
 #[derive(Deserialize, Clone, Serialize)]
 #[serde(tag = "order", content = "parameters", rename_all = "lowercase")]
 enum TableRequest {
     order { itemname: String, qty: i32 },
 }
+
 
 impl std::fmt::Debug for TableRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -119,15 +126,9 @@ fn microservice_handler(
 
             let resp = req.into_body().concat2().map(|chunks| {
                 println!("DATA: {:?}", chunks.as_ref());
-                let res = serde_json::from_slice::<TableRequest>(chunks.as_ref())
-                    //  .map(handle_request)
-                    .map(|t| match t {
-                        TableRequest::order { itemname, qty } => TableRequest::order {
-                            itemname,
-                            qty: qty + 2,
-                        },
-                    })
-                    .and_then(|resp| serde_json::to_string(&resp));
+                let res = serde_json::from_slice::<TableRequestVec>(chunks.as_ref())
+                    // .map(handle_request)
+                    .map(|t| { t }).and_then(|resp| serde_json::to_string(&resp));
                 println!("Ok Somethuing {:?}", res);
                 match res {
                     Ok(body) => {
