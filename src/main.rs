@@ -69,7 +69,7 @@ fn get_global_num() -> usize{
         retval=*cnt;
     });
     match spawn(lock).wait_future() {
-        Ok(x) =>  {  }
+        Ok(_x) =>  {  }
         Err(_) => {  }
     }
     retval
@@ -192,7 +192,7 @@ fn microservice_handler(
                 }
             }
         }
-        ("UPDATE", Some(t), path) => {
+        ("UPDATE", Some(_t), Some(_path)) => {
             // Change some object for instance when it is deliverd to table
         }
         _ => {
@@ -258,7 +258,7 @@ fn table_add_items( body: Body, table: usize,
 fn table_remove_item(table:usize,path:String)-> ApiResult<String> {
     let removethis = match path.parse::<usize>(){
         Ok(x) => x,
-        Err(x) => return ApiResult::Err(503,"Illegal table number".to_string())
+        Err(_x) => return ApiResult::Err(503,"Illegal table number".to_string())
     };
     println!();
     let outerlock = STORAGE.read().map(|outer| {
@@ -333,7 +333,7 @@ mod tests {
         let chunks = vec!["hello", " ", "world"];
         let stream = futures::stream::iter_ok::<_, ::std::io::Error>(chunks);
         let body = Body::wrap_stream(stream);
-        let table: usize = 1000;
+        let table: usize = 1;
         let ans = table_add_items(body, table);
         let r = spawn(ans).wait_future().unwrap();
         assert!(r.status() == 422);
@@ -346,7 +346,8 @@ mod tests {
         let ans = table_add_items(body, table);
         let r = spawn(ans).wait_future().unwrap();
         assert!(r.status() == 200);
-        table_remove_item(10, "1".to_string());
+
+
     }  
     #[test]
     fn check_store_values(){
@@ -366,7 +367,18 @@ mod tests {
         };
         let after:Vec<Record> = serde_json::from_slice(table_get_all_res.as_bytes()).unwrap();
 
+        // Should be one more entry
         assert!(after.len()-before.len() == 1);
+        table_remove_item(10, "1".to_string());
+
+        let table_get_all_res=match table_get_all(10){
+            ApiResult::Ok(x) => x,
+            _ =>{panic!()}
+        };
+        let _after:Vec<Record> = serde_json::from_slice(table_get_all_res.as_bytes()).unwrap();
+
+        //TODO Should be back where we started but item ide can not be guessed as they are world uniq now
+        //assert_eq!(after.len(),before.len());
     }
 
     #[test]
