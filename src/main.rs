@@ -28,7 +28,7 @@ use hyper::error::Error;
 
 #[derive(Copy, Deserialize, Clone, Serialize)]
 enum States {
-    ETA(u32),
+    PENDING,
     DELIVERD,
     EMPTY,
 }
@@ -38,6 +38,7 @@ struct Record {
     id: u32,
     state: States,
     qty: i32,
+    eta: u64,
 }
 
 struct Datastore {
@@ -50,19 +51,20 @@ struct TableRequestVec {
 }
 
 #[derive(Deserialize, Clone, Serialize)]
-#[serde(tag = "order", content = "parameters", rename_all = "lowercase")]
-enum TableRequest {
-    order { itemname: String, qty: i32 },
+struct TableRequest {
+    itemname: String,
+    qty: i32,
+    eta: u64,
 }
 
-impl std::fmt::Debug for TableRequest {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            TableRequest::order { itemname, qty } => write!(f, "{} {}", itemname, qty),
-            _ => write! {f,""},
-        }
-    }
-}
+// impl std::fmt::Debug for TableRequest {
+//     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+//         match self {
+//             TableRequest::order { itemname, qty } => write!(f, "{} {}", itemname, qty),
+//             _ => write! {f,""},
+//         }
+//     }
+// }
 fn DatastoreRwLock(num: usize) -> RwLock<Datastore> {
     let mut v: Vec<RwLock<Vec<Record>>> = Vec::with_capacity(100);
     for _ in 0..num {
@@ -159,7 +161,7 @@ fn microservice_handler(
             let lock = STORAGE.read();
             let v = &spawn(lock).wait_future().unwrap().vault;
             match v.get(table as usize) {
-                Some(x) => {
+                Some(_x) => {
                     return table_add_items(req.into_body(), table);
                 }
                 None => {
@@ -175,7 +177,6 @@ fn microservice_handler(
         }
         ("DELETE", Some(t), path) => {
             // Remove something from table t
-
             //Todo find a way to identify items in table tab... maybe with id
         }
         ("UPDATE", Some(t), path) => {
@@ -185,7 +186,7 @@ fn microservice_handler(
             // Unsupported operation
         }
     };
-
+// Fall throu default response
     let ans = "Not implemented";
     let resp = Response::builder()
         .status(501)
@@ -245,15 +246,14 @@ fn slurp_vector(table: u32, v: Vec<TableRequest>) -> u32 {
     let mut target: Vec<Record> = Vec::with_capacity(v.len());
     println!("{}", v.len());
     for i in v {
-        let timetocook = 60 * 5;
-        match i {
-            TableRequest::order { itemname, qty } => target.push(Record {
-                itemname: itemname,
+        target.push(Record {
+                itemname: i.itemname,
                 id: 0,
-                qty: qty,
-                state: States::ETA(timetocook),
-            }),
-        }
+                qty: i.qty,
+                state: States::PENDING,
+                eta:i.eta,
+            }
+        )
     }
 
     // Get lock for data store
