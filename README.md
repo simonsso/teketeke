@@ -29,3 +29,6 @@ update item on /table/item (TODO)
 update menu with decreased inventory (TODO)
 update item to invoice (TODO)
 
+Change order
+Http DELETE can be requested to http://localhost/table/x/y where x is the table num and y is the item num as returned from the GET operations
+
