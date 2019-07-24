@@ -24,7 +24,7 @@ enum States {
 #[derive(Deserialize, Clone, Serialize)]
 struct Record {
     itemname: String,
-    id: u32,
+    id: usize,
     state: States,
     qty: i32,
     eta: u64,
@@ -57,12 +57,12 @@ fn datastore_rw_lock(num: usize) -> RwLock<Datastore> {
 
 lazy_static! {
     // TODO verify the correctness of regexp in tests
-    static ref RE_TABLE_NUM: Regex = Regex::new(r"^/table/(\d+)(/.*)?$").unwrap();
+    static ref RE_TABLE_NUM: Regex = Regex::new(r"^/table/(\d+)(/(.*))?$").unwrap();
     static ref STORAGE:RwLock<Datastore> =datastore_rw_lock(100);  //TODO init with 100 tables this should be done on demand instead
-    static ref ITEMNUM:RwLock<u32> =RwLock::new(0);             // Global uniq order num
+    static ref ITEMNUM:RwLock<usize> =RwLock::new(0);             // Global uniq order num
 }
 
-fn get_global_num() -> u32{
+fn get_global_num() -> usize{
     let mut retval = 0;
     let lock = ITEMNUM.write().map(|mut cnt|{
         *cnt+=1;
@@ -83,11 +83,11 @@ fn microservice_handler(
     let method = req.method().to_string();
 
     // Parse request URL with stored Regexp
-    let (table, path): (Option<u32>, Option<String>) = match RE_TABLE_NUM.captures(&uri) {
+    let (table, path): (Option<usize>, Option<String>) = match RE_TABLE_NUM.captures(&uri) {
         Some(m) => {
             // this is checked to be an integer
-            let tbl = m.get(1).unwrap().as_str().parse::<u32>().unwrap();
-            match m.get(2) {
+            let tbl = m.get(1).unwrap().as_str().parse::<usize>().unwrap();
+            match m.get(3) {
                 Some(argument) => (Some(tbl), Some(argument.as_str().to_string())),
                 None => (Some(tbl), None),
             }
@@ -172,9 +172,25 @@ fn microservice_handler(
                 }
             }
         }
-        ("DELETE", Some(t), path) => {
+        ("DELETE", Some(table), Some(path)) => {
             // Remove something from table t
             //Todo find a way to identify items in table tab... maybe with id
+            let table = table as usize;
+            match table_remove_item(table,path) {
+                ApiResult::Ok(s) => {
+                    return Box::new(future::ok(
+                        Response::builder().status(200).body(Body::from(s)).unwrap(),
+                    ));
+                }
+                ApiResult::Err(code, s) => {
+                    return Box::new(future::ok(
+                        Response::builder()
+                            .status(code)
+                            .body(Body::from(s))
+                            .unwrap(),
+                    ));
+                }
+            }
         }
         ("UPDATE", Some(t), path) => {
             // Change some object for instance when it is deliverd to table
@@ -222,7 +238,7 @@ fn table_get_all(table: usize) -> ApiResult<String> {
     }
 }
 
-fn table_add_items( body: Body, table: u32,
+fn table_add_items( body: Body, table: usize,
 ) -> Box<Future<Item = Response<Body>, Error = Error> + Send> {
     let resp = body.concat2().map(move |chunks| {
         let res = serde_json::from_slice::<TableRequestVec>(chunks.as_ref())
@@ -239,9 +255,36 @@ fn table_add_items( body: Body, table: u32,
     Box::new(resp)
 }
 
-fn table_store_new_items(table: u32, v: Vec<TableRequest>) -> usize {
+fn table_remove_item(table:usize,path:String)-> ApiResult<String> {
+    let removethis = match path.parse::<usize>(){
+        Ok(x) => x,
+        Err(x) => return ApiResult::Err(503,"Illegal table number".to_string())
+    };
+    println!();
+    let outerlock = STORAGE.read().map(|outer| {
+    // range check done is outside
+    let innerlock = (*outer).vault[table as usize].write().map(|mut inner| {
+            // *inner is now the handle for table vector
+            
+            match (*inner).iter().position( |c| (*c).id == removethis) {
+                Some(x) =>{
+                     (*inner).remove(x);
+                },
+                None => {
+                },
+            }
+        });
+        spawn(innerlock).wait_future()
+    });
+    match spawn(outerlock).wait_future() {
+        Ok(_) =>  { 0 }
+        Err(_) => { 0 }
+    };
+    ApiResult::Ok("".to_string())
+}
+
+fn table_store_new_items(table: usize, v: Vec<TableRequest>) -> usize {
     let mut target: Vec<Record> = Vec::with_capacity(v.len());
-    println!("{}", v.len());
     for i in v {
         target.push(Record {
             itemname: i.itemname,
@@ -290,7 +333,7 @@ mod tests {
         let chunks = vec!["hello", " ", "world"];
         let stream = futures::stream::iter_ok::<_, ::std::io::Error>(chunks);
         let body = Body::wrap_stream(stream);
-        let table: u32 = 1000;
+        let table: usize = 1000;
         let ans = table_add_items(body, table);
         let r = spawn(ans).wait_future().unwrap();
         assert!(r.status() == 422);
@@ -299,10 +342,11 @@ mod tests {
         let chunks = vec![order];
         let stream = futures::stream::iter_ok::<_, ::std::io::Error>(chunks);
         let body = Body::wrap_stream(stream);
-        let table: u32 = 1;
+        let table: usize = 1;
         let ans = table_add_items(body, table);
         let r = spawn(ans).wait_future().unwrap();
         assert!(r.status() == 200);
+        table_remove_item(10, "1".to_string());
     }  
     #[test]
     fn check_store_values(){
