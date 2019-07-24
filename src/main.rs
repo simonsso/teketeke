@@ -59,6 +59,20 @@ lazy_static! {
     // TODO verify the correctness of regexp in tests
     static ref RE_TABLE_NUM: Regex = Regex::new(r"^/table/(\d+)(/.*)?$").unwrap();
     static ref STORAGE:RwLock<Datastore> =datastore_rw_lock(100);  //TODO init with 100 tables this should be done on demand instead
+    static ref ITEMNUM:RwLock<u32> =RwLock::new(0);             // Global uniq order num
+}
+
+fn get_global_num() -> u32{
+    let mut retval = 0;
+    let lock = ITEMNUM.write().map(|mut cnt|{
+        *cnt+=1;
+        retval=*cnt;
+    });
+    match spawn(lock).wait_future() {
+        Ok(x) =>  {  }
+        Err(_) => {  }
+    }
+    retval
 }
 
 // Encapsulate response for hyper
@@ -85,8 +99,7 @@ fn microservice_handler(
         ("GET", Some(table), None) => {
             // GET all items for table t
             let table = table as usize;
-            println!("Hello GET {}  here", table);
-            match get_all(table) {
+            match table_get_all(table) {
                 ApiResult::Ok(s) => {
                     return Box::new(future::ok(
                         Response::builder().status(200).body(Body::from(s)).unwrap(),
@@ -108,11 +121,14 @@ fn microservice_handler(
             let lock = STORAGE.read();
             let v = &spawn(lock).wait_future().unwrap().vault;
 
+            //Reusing get from table code
             let mut bodychunks: Vec<String> = Vec::new();
-            bodychunks.push("[".to_string());
+            bodychunks.push("{\"tables\":{".to_string());
             for i in 0..v.len() {
-                match get_all(i) {
+                match table_get_all(i) {
                     ApiResult::Ok(s) => {
+                        let headerstring = format!("\"{}\":",i);
+                        bodychunks.push(headerstring);
                         bodychunks.push(s);
                         bodychunks.push(comma.clone())
                     }
@@ -125,7 +141,7 @@ fn microservice_handler(
             if bodychunks.last() == Some(&comma) {
                 bodychunks.pop();
             }
-            bodychunks.push("]".to_string());
+            bodychunks.push("}}".to_string());
             let stream = futures::stream::iter_ok::<_, ::std::io::Error>(bodychunks);
             let body = Body::wrap_stream(stream);
             let resp = Response::builder().status(200).body(body).unwrap();
@@ -183,7 +199,7 @@ enum ApiResult<T> {
 }
 
 
-fn get_all(table: usize) -> ApiResult<String> {
+fn table_get_all(table: usize) -> ApiResult<String> {
     let lock = STORAGE.read();
     let v = &spawn(lock).wait_future().unwrap().vault;
     match v.get(table) {
@@ -210,7 +226,7 @@ fn table_add_items( body: Body, table: u32,
 ) -> Box<Future<Item = Response<Body>, Error = Error> + Send> {
     let resp = body.concat2().map(move |chunks| {
         let res = serde_json::from_slice::<TableRequestVec>(chunks.as_ref())
-            .map(|t| store_new_items(table, t.tab))
+            .map(|t| table_store_new_items(table, t.tab))
             .and_then(|resp| serde_json::to_string(&resp));
         match res {
             Ok(body) => Response::new(body.into()),
@@ -223,19 +239,18 @@ fn table_add_items( body: Body, table: u32,
     Box::new(resp)
 }
 
-fn store_new_items(table: u32, v: Vec<TableRequest>) -> usize {
+fn table_store_new_items(table: u32, v: Vec<TableRequest>) -> usize {
     let mut target: Vec<Record> = Vec::with_capacity(v.len());
     println!("{}", v.len());
     for i in v {
         target.push(Record {
             itemname: i.itemname,
-            id: 0,
+            id: get_global_num(),
             qty: i.qty,
             state: States::PENDING,
             eta: i.eta,
         })
     }
-
     let retval = target.len();
     // Get lock for data store
     let outerlock = STORAGE.read().map(|outer| {
@@ -247,10 +262,7 @@ fn store_new_items(table: u32, v: Vec<TableRequest>) -> usize {
     });
     match spawn(outerlock).wait_future() {
         Ok(_) => {retval}
-        Err(_) => {
-            println!("Internal lock error");
-            0
-        }
+        Err(_) => { 0 }
     }
 }
 
@@ -297,18 +309,18 @@ mod tests {
         let mut v: Vec<TableRequest> = Vec::new();
         v.push(TableRequest{itemname: "Something".to_string(),qty : 1, eta:100 });
 
-        let get_all_res=match get_all(10){
+        let table_get_all_res=match table_get_all(10){
             ApiResult::Ok(x) => x,
             _ =>{panic!()}
         };
-        let before:Vec<Record> = serde_json::from_slice(get_all_res.as_bytes()).unwrap();
-        let storednum =  store_new_items(10, v);
+        let before:Vec<Record> = serde_json::from_slice(table_get_all_res.as_bytes()).unwrap();
+        let storednum =  table_store_new_items(10, v);
         assert_eq!(1, storednum);
-        let get_all_res=match get_all(10){
+        let table_get_all_res=match table_get_all(10){
             ApiResult::Ok(x) => x,
             _ =>{panic!()}
         };
-        let after:Vec<Record> = serde_json::from_slice(get_all_res.as_bytes()).unwrap();
+        let after:Vec<Record> = serde_json::from_slice(table_get_all_res.as_bytes()).unwrap();
 
         assert!(after.len()-before.len() == 1);
     }
