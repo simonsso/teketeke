@@ -176,10 +176,12 @@ fn microservice_handler(
     Box::new(future::ok(resp))
 }
 
+
 enum ApiResult<T> {
     Ok(T),
     Err(u16, String),
 }
+
 
 fn get_all(table: usize) -> ApiResult<String> {
     let lock = STORAGE.read();
@@ -204,13 +206,11 @@ fn get_all(table: usize) -> ApiResult<String> {
     }
 }
 
-fn table_add_items(
-    body: Body,
-    table: u32,
+fn table_add_items( body: Body, table: u32,
 ) -> Box<Future<Item = Response<Body>, Error = Error> + Send> {
     let resp = body.concat2().map(move |chunks| {
         let res = serde_json::from_slice::<TableRequestVec>(chunks.as_ref())
-            .map(|t| slurp_vector(table, t.tab))
+            .map(|t| store_new_items(table, t.tab))
             .and_then(|resp| serde_json::to_string(&resp));
         match res {
             Ok(body) => Response::new(body.into()),
@@ -223,7 +223,7 @@ fn table_add_items(
     Box::new(resp)
 }
 
-fn slurp_vector(table: u32, v: Vec<TableRequest>) -> u32 {
+fn store_new_items(table: u32, v: Vec<TableRequest>) -> usize {
     let mut target: Vec<Record> = Vec::with_capacity(v.len());
     println!("{}", v.len());
     for i in v {
@@ -236,6 +236,7 @@ fn slurp_vector(table: u32, v: Vec<TableRequest>) -> u32 {
         })
     }
 
+    let retval = target.len();
     // Get lock for data store
     let outerlock = STORAGE.read().map(|outer| {
         // range check done is outside
@@ -245,12 +246,12 @@ fn slurp_vector(table: u32, v: Vec<TableRequest>) -> u32 {
         spawn(innerlock).wait_future()
     });
     match spawn(outerlock).wait_future() {
-        Ok(_) => {}
+        Ok(_) => {retval}
         Err(_) => {
             println!("Internal lock error");
+            0
         }
     }
-    0
 }
 
 fn main() {
@@ -282,7 +283,7 @@ mod tests {
         let r = spawn(ans).wait_future().unwrap();
         assert!(r.status() == 422);
 
-        let order = r#"{"tab":[{"order": "order", "parameters": { "itemname": "Edamame","qty" : 100 }},{"order": "order", "parameters": { "itemname": "Nama biru","qty" : 5 } }]}"#;
+        let order = r#"{"tab":[{"itemname": "Edamame","qty" : 100 ,"eta":100 },{"itemname": "Nama biru","qty" : 5 ,"eta":200} ]}"#;
         let chunks = vec![order];
         let stream = futures::stream::iter_ok::<_, ::std::io::Error>(chunks);
         let body = Body::wrap_stream(stream);
@@ -290,7 +291,28 @@ mod tests {
         let ans = table_add_items(body, table);
         let r = spawn(ans).wait_future().unwrap();
         assert!(r.status() == 200);
+    }  
+    #[test]
+    fn check_store_values(){
+        let mut v: Vec<TableRequest> = Vec::new();
+        v.push(TableRequest{itemname: "Something".to_string(),qty : 1, eta:100 });
+
+        let get_all_res=match get_all(10){
+            ApiResult::Ok(x) => x,
+            _ =>{panic!()}
+        };
+        let before:Vec<Record> = serde_json::from_slice(get_all_res.as_bytes()).unwrap();
+        let storednum =  store_new_items(10, v);
+        assert_eq!(1, storednum);
+        let get_all_res=match get_all(10){
+            ApiResult::Ok(x) => x,
+            _ =>{panic!()}
+        };
+        let after:Vec<Record> = serde_json::from_slice(get_all_res.as_bytes()).unwrap();
+
+        assert!(after.len()-before.len() == 1);
     }
+
     #[test]
     fn check_regexp() {
         let ans = RE_TABLE_NUM.captures("/table/100");
