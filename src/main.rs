@@ -1,29 +1,18 @@
-//extern crate futures;
-//extern crate hyper;
 #[macro_use]
 extern crate serde_derive;
 extern crate hyper;
 extern crate serde_json;
 
 use futures::{future, Future, Stream};
-use hyper::{Body, Method, Request, Response, Server, StatusCode};
-use std::borrow::Borrow;
-// use hyper::{Body, Error, Method, Request, Response, Server, StatusCode};
+use hyper::{Body, Request, Response, Server, StatusCode};
 
 use hyper::service::service_fn;
 use lazy_static::lazy_static;
 
-// added from example
-//use futures::{future, /*task,*/ Future, Stream};
 use regex::Regex;
 
-// use std::{thread, time};
-
-// use future::{err, ok};
-// use futures::future::lazy;
 use futures::task::spawn;
 use futures_locks::RwLock;
-//use tokio::timer::Interval;
 use hyper::error::Error;
 
 #[derive(Copy, Deserialize, Clone, Serialize)]
@@ -57,15 +46,7 @@ struct TableRequest {
     eta: u64,
 }
 
-// impl std::fmt::Debug for TableRequest {
-//     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-//         match self {
-//             TableRequest::order { itemname, qty } => write!(f, "{} {}", itemname, qty),
-//             _ => write! {f,""},
-//         }
-//     }
-// }
-fn DatastoreRwLock(num: usize) -> RwLock<Datastore> {
+fn datastore_rw_lock(num: usize) -> RwLock<Datastore> {
     let mut v: Vec<RwLock<Vec<Record>>> = Vec::with_capacity(100);
     for _ in 0..num {
         v.push(RwLock::new(Vec::new()))
@@ -77,7 +58,7 @@ fn DatastoreRwLock(num: usize) -> RwLock<Datastore> {
 lazy_static! {
     // TODO verify the correctness of regexp in tests
     static ref RE_TABLE_NUM: Regex = Regex::new(r"^/table/(\d+)(/.*)?$").unwrap();
-    static ref STORAGE:RwLock<Datastore> = DatastoreRwLock(100);  //TODO init with 100 tables this should be done on demand instead
+    static ref STORAGE:RwLock<Datastore> =datastore_rw_lock(100);  //TODO init with 100 tables this should be done on demand instead
 }
 
 // Encapsulate response for hyper
@@ -186,7 +167,7 @@ fn microservice_handler(
             // Unsupported operation
         }
     };
-// Fall throu default response
+    // Fall throu default response
     let ans = "Not implemented";
     let resp = Response::builder()
         .status(501)
@@ -247,13 +228,12 @@ fn slurp_vector(table: u32, v: Vec<TableRequest>) -> u32 {
     println!("{}", v.len());
     for i in v {
         target.push(Record {
-                itemname: i.itemname,
-                id: 0,
-                qty: i.qty,
-                state: States::PENDING,
-                eta:i.eta,
-            }
-        )
+            itemname: i.itemname,
+            id: 0,
+            qty: i.qty,
+            state: States::PENDING,
+            eta: i.eta,
+        })
     }
 
     // Get lock for data store
@@ -264,7 +244,12 @@ fn slurp_vector(table: u32, v: Vec<TableRequest>) -> u32 {
         });
         spawn(innerlock).wait_future()
     });
-    spawn(outerlock).wait_future();
+    match spawn(outerlock).wait_future() {
+        Ok(_) => {}
+        Err(_) => {
+            println!("Internal lock error");
+        }
+    }
     0
 }
 
