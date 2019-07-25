@@ -17,9 +17,8 @@ use regex::Regex;
 
 use futures::task::spawn;
 use futures_locks::RwLock;
-use tokio::fs::File;
 use hyper_staticfile::FileChunkStream;
-
+use tokio::fs::File;
 
 #[derive(Copy, Deserialize, Clone, Serialize)]
 enum States {
@@ -71,15 +70,15 @@ lazy_static! {
     static ref ITEMNUM:RwLock<usize> =RwLock::new(0);             // Global uniq order num
 }
 
-fn get_global_num() -> usize{
+fn get_global_num() -> usize {
     let mut retval = 0;
-    let lock = ITEMNUM.write().map(|mut cnt|{
-        *cnt+=1;
-        retval=*cnt;
+    let lock = ITEMNUM.write().map(|mut cnt| {
+        *cnt += 1;
+        retval = *cnt;
     });
     match spawn(lock).wait_future() {
-        Ok(_x) =>  {  }
-        Err(_) => {  }
+        Ok(_x) => {}
+        Err(_) => {}
     }
     retval
 }
@@ -91,7 +90,7 @@ fn microservice_handler(
     let uri: String = req.uri().to_string();
     let method = req.method().to_string();
 
-    if let None = RE_TABLE.captures(&uri){
+    if let None = RE_TABLE.captures(&uri) {
         return serve_file(&uri);
     }
     // Parse request URL with stored Regexp
@@ -139,7 +138,7 @@ fn microservice_handler(
             for i in 0..v.len() {
                 match table_get_all(i) {
                     ApiResult::Ok(s) => {
-                        let headerstring = format!("\"{}\":",i);
+                        let headerstring = format!("\"{}\":", i);
                         bodychunks.push(headerstring);
                         bodychunks.push(s);
                         bodychunks.push(comma.clone())
@@ -188,7 +187,7 @@ fn microservice_handler(
             // Remove something from table t
             //Todo find a way to identify items in table tab... maybe with id
             let table = table as usize;
-            match table_remove_item(table,path) {
+            match table_remove_item(table, path) {
                 ApiResult::Ok(s) => {
                     return Box::new(future::ok(
                         Response::builder().status(200).body(Body::from(s)).unwrap(),
@@ -220,12 +219,10 @@ fn microservice_handler(
     Box::new(future::ok(resp))
 }
 
-
 enum ApiResult<T> {
     Ok(T),
     Err(u16, String),
 }
-
 
 fn table_get_all(table: usize) -> ApiResult<String> {
     let lock = STORAGE.read();
@@ -257,47 +254,51 @@ where
     Error::new(std::io::ErrorKind::Other, err)
 }
 
-fn table_add_items( body: Body, table: usize,
+fn table_add_items(
+    body: Body,
+    table: usize,
 ) -> Box<Future<Item = Response<Body>, Error = std::io::Error> + Send> {
-    let resp = body.concat2().map(move |chunks| {
-        let res = serde_json::from_slice::<TableRequestVec>(chunks.as_ref())
-            .map(|t| table_store_new_items(table, t.tab))
-            .and_then(|resp| serde_json::to_string(&resp));
-        match res {
-            Ok(body) => Response::new(body.into()),
-            Err(err) => Response::builder()
-                .status(StatusCode::UNPROCESSABLE_ENTITY)
-                .body(err.to_string().into())
-                .unwrap(),
-        }
-    }).map_err(other);
+    let resp = body
+        .concat2()
+        .map(move |chunks| {
+            let res = serde_json::from_slice::<TableRequestVec>(chunks.as_ref())
+                .map(|t| table_store_new_items(table, t.tab))
+                .and_then(|resp| serde_json::to_string(&resp));
+            match res {
+                Ok(body) => Response::new(body.into()),
+                Err(err) => Response::builder()
+                    .status(StatusCode::UNPROCESSABLE_ENTITY)
+                    .body(err.to_string().into())
+                    .unwrap(),
+            }
+        })
+        .map_err(other);
     Box::new(resp)
 }
 
-fn table_remove_item(table:usize,path:String)-> ApiResult<String> {
-    let removethis = match path.parse::<usize>(){
+fn table_remove_item(table: usize, path: String) -> ApiResult<String> {
+    let removethis = match path.parse::<usize>() {
         Ok(x) => x,
-        Err(_x) => return ApiResult::Err(503,"Illegal table number".to_string())
+        Err(_x) => return ApiResult::Err(503, "Illegal table number".to_string()),
     };
     println!();
     let outerlock = STORAGE.read().map(|outer| {
-    // range check done is outside
-    let innerlock = (*outer).vault[table as usize].write().map(|mut inner| {
+        // range check done is outside
+        let innerlock = (*outer).vault[table as usize].write().map(|mut inner| {
             // *inner is now the handle for table vector
-            
-            match (*inner).iter().position( |c| (*c).id == removethis) {
-                Some(x) =>{
-                     (*inner).remove(x);
-                },
-                None => {
-                },
+
+            match (*inner).iter().position(|c| (*c).id == removethis) {
+                Some(x) => {
+                    (*inner).remove(x);
+                }
+                None => {}
             }
         });
         spawn(innerlock).wait_future()
     });
     match spawn(outerlock).wait_future() {
-        Ok(_) =>  { 0 }
-        Err(_) => { 0 }
+        Ok(_) => 0,
+        Err(_) => 0,
     };
     ApiResult::Ok("".to_string())
 }
@@ -323,33 +324,31 @@ fn table_store_new_items(table: usize, v: Vec<TableRequest>) -> usize {
         spawn(innerlock).wait_future()
     });
     match spawn(outerlock).wait_future() {
-        Ok(_) => {retval}
-        Err(_) => { 0 }
+        Ok(_) => retval,
+        Err(_) => 0,
     }
 }
 
-
-fn serve_file(path:&str)-> Box<Future<Item=Response<Body>, Error = Error> + Send> 
-{
-// Only serv the hard coded files needed for this project
+fn serve_file(path: &str) -> Box<Future<Item = Response<Body>, Error = Error> + Send> {
+    // Only serv the hard coded files needed for this project
     if let Some(cap) = RE_DOWNLOAD_FILE.captures(path) {
-        let filename = format!("client/{}",cap.get(1).unwrap().as_str());
+        let filename = format!("client/{}", cap.get(1).unwrap().as_str());
         let open_file = File::open(filename);
         let body = open_file.map(|file| {
             let chunks = FileChunkStream::new(file);
-            Response::new(Body::wrap_stream(chunks))//.map_err(|e| {
-              //  hyper::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, "Ignorederror"))
-              //hyper::Error::new_user_header()
-            //})
+            Response::new(Body::wrap_stream(chunks)) //.map_err(|e| {
+                                                     //  hyper::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, "Ignorederror"))
+                                                     //hyper::Error::new_user_header()
+                                                     //})
         });
         Box::new(body)
-    }else{
-          let ans = "Thou shalt not read forbidden files";
-    let resp = Response::builder()
-        .status(403)
-        .body(Body::from(ans))
-        .unwrap();
-    Box::new(future::ok(resp))  
+    } else {
+        let ans = "Thou shalt not read forbidden files";
+        let resp = Response::builder()
+            .status(403)
+            .body(Body::from(ans))
+            .unwrap();
+        Box::new(future::ok(resp))
     }
 }
 
@@ -390,36 +389,38 @@ mod tests {
         let ans = table_add_items(body, table);
         let r = spawn(ans).wait_future().unwrap();
         assert!(r.status() == 200);
-
-
-    }  
+    }
     #[test]
-    fn check_store_values(){
+    fn check_store_values() {
         let mut v: Vec<TableRequest> = Vec::new();
-        v.push(TableRequest{itemname: "Something".to_string(),qty : 1, eta:100 });
+        v.push(TableRequest {
+            itemname: "Something".to_string(),
+            qty: 1,
+            eta: 100,
+        });
 
-        let table_get_all_res=match table_get_all(10){
+        let table_get_all_res = match table_get_all(10) {
             ApiResult::Ok(x) => x,
-            _ =>{panic!()}
+            _ => panic!(),
         };
-        let before:Vec<Record> = serde_json::from_slice(table_get_all_res.as_bytes()).unwrap();
-        let storednum =  table_store_new_items(10, v);
+        let before: Vec<Record> = serde_json::from_slice(table_get_all_res.as_bytes()).unwrap();
+        let storednum = table_store_new_items(10, v);
         assert_eq!(1, storednum);
-        let table_get_all_res=match table_get_all(10){
+        let table_get_all_res = match table_get_all(10) {
             ApiResult::Ok(x) => x,
-            _ =>{panic!()}
+            _ => panic!(),
         };
-        let after:Vec<Record> = serde_json::from_slice(table_get_all_res.as_bytes()).unwrap();
+        let after: Vec<Record> = serde_json::from_slice(table_get_all_res.as_bytes()).unwrap();
 
         // Should be one more entry
-        assert!(after.len()-before.len() == 1);
+        assert!(after.len() - before.len() == 1);
         table_remove_item(10, "1".to_string());
 
-        let table_get_all_res=match table_get_all(10){
+        let table_get_all_res = match table_get_all(10) {
             ApiResult::Ok(x) => x,
-            _ =>{panic!()}
+            _ => panic!(),
         };
-        let _after:Vec<Record> = serde_json::from_slice(table_get_all_res.as_bytes()).unwrap();
+        let _after: Vec<Record> = serde_json::from_slice(table_get_all_res.as_bytes()).unwrap();
 
         //TODO Should be back where we started but item ide can not be guessed as they are world uniq now
         //assert_eq!(after.len(),before.len());
