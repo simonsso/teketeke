@@ -33,6 +33,33 @@ class LikeButton extends React.Component {
   } 
 }   
 
+class DeleteButton extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { liked: false , xurl:props.xurl };
+  }
+    
+  render() {
+    if (this.state.liked) { 
+      return "revokation pending"
+    }
+    return e(
+      'button',
+      { onClick: () => {
+            fetch(this.state.xurl, {
+                  method: 'DELETE',
+                  headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                  },
+                });
+                this.setState({liked:true});
+      },},"remove ",);
+      
+    }
+}
+    
+
 var dynamic_like=function(){
    const domContainer = document.querySelector('#top');
    var p= document.createElement("div");
@@ -64,8 +91,6 @@ var post_order=function(o){
     })
 }
 
-window.setInterval(request_full_tab,10);
-
 var request_full_tab = function(){
     let tablenumer=document.getElementById("UITabNum");
     let tab=tablenumer?tablenumer.value:0;
@@ -75,10 +100,10 @@ var request_full_tab = function(){
         'Accept': 'application/json',
         'Content-Type': 'application/json',
       }}
-    ).then(response => response.json()).then(print_full_tab);
+    ).then(response => response.json()).then(response => {print_full_tab(tab,response)});
 }
 
-var print_full_tab=function(resp){
+var print_full_tab=function(tableid,resp){
     let domContainer = document.querySelector('#bartab');
     while (domContainer.firstChild) {
       domContainer.removeChild(domContainer.firstChild);
@@ -88,7 +113,14 @@ var print_full_tab=function(resp){
         let t=responesline.itemname;
         let time = responesline.eta-(Date.now() / 1000 | 0);
 
-        li.appendChild(document.createTextNode(responesline.qty+"  "+t+" "+(time>0?time:" (overdue) ")))
+        let p= document.createTextNode(responesline.qty+"  "+t+" "+(time>0?time:" (overdue) "));
+        let p2 = document.createElement("A");
+        
+        let delete_me_url="http://localhost:8888/table/"+tableid+"/"+responesline.id;
+        li.appendChild(p);
+        li.appendChild(p2);
+        ReactDOM.render(e(DeleteButton,{xurl:delete_me_url}), p2);
+
         //domContainer.append(t);
         //domContainer.append(time>0?time:" DUE ");
         domContainer.appendChild(li);

@@ -9,7 +9,8 @@
     <h2>Demonstation order terminal</h2>
 
     <!-- We will put our React component inside this div. -->
-    <div> Taking orders for table <input type="number" name="UITabNum" id="UITabNum" min="0" max="100" value="0" onchange="request_full_tab"> </div>
+    <div> Taking orders for table <input type="number" name="UITabNum" onchange="request_full_tab()" id="UITabNum" min="0" max="100" value="0"> 
+    <button onmouseover="request_full_tab()" onclick="request_full_tab()" onmousewheel="request_full_tab()">Update</button> </div>
     <div id="top"></div>
 
     <!-- Load React. -->
@@ -46,11 +47,11 @@
       for (line of x) {
          dynamic_menu(line);
       }
-      setInterval(request_full_tab,10);
+  
     </script>
       </div>
 
-    <ul id=bartab>
-    </ul>
+    <table id=bartab>
+    </table>
   </body>
 </html>
