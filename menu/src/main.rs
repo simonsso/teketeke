@@ -1,11 +1,7 @@
 #[macro_use]
 extern crate serde_derive;
 extern crate hyper;
-extern crate hyper_staticfile;
 extern crate serde_json;
-
-use std::io::Error;
-//use hyper::error::Error;
 
 use futures::{future, Future, Stream};
 use hyper::{Body, Request, Response, Server, StatusCode};
@@ -17,9 +13,7 @@ use regex::Regex;
 
 use futures::task::spawn;
 use futures_locks::RwLock;
-use tokio::fs::File;
-use hyper_staticfile::FileChunkStream;
-
+use hyper::error::Error;
 
 #[derive(Copy, Deserialize, Clone, Serialize)]
 enum States {
@@ -27,13 +21,15 @@ enum States {
     DELIVERD,
     EMPTY,
 }
+
+//Record
 #[derive(Deserialize, Clone, Serialize)]
 struct Record {
     itemname: String,
     id: usize,
-    state: States,
     qty: i32,
     eta: u64,
+    price: u32,
 }
 
 struct Datastore {
@@ -63,11 +59,8 @@ fn datastore_rw_lock(num: usize) -> RwLock<Datastore> {
 
 lazy_static! {
     // TODO verify the correctness of regexp in tests
-    static ref RE_TABLE_NUM: Regex = Regex::new(r"^/table/(\d+)(/(.*))?$").unwrap();
-    static ref RE_TABLE:     Regex = Regex::new(r"^/table/?").unwrap();
-    static ref RE_DOWNLOAD_FILE:Regex = Regex::new(r"^/(index.html|button.js)$").unwrap();
-    static ref STORAGE:RwLock<Datastore> =datastore_rw_lock(101);   //init with tables upto 100
-                                                                   // TODO this should be done on demand instead
+    static ref RE_TABLE_NUM: Regex = Regex::new(r"^/menu/(\d+)(/(.*))?$").unwrap();
+    static ref STORAGE:RwLock<Datastore> =datastore_rw_lock(10);
     static ref ITEMNUM:RwLock<usize> =RwLock::new(0);             // Global uniq order num
 }
 
@@ -87,13 +80,11 @@ fn get_global_num() -> usize{
 // Encapsulate response for hyper
 fn microservice_handler(
     req: Request<Body>,
-) -> Box<Future<Item = Response<Body>, Error = std::io::Error> + Send> {
+) -> Box<Future<Item = Response<Body>, Error = Error> + Send> {
     let uri: String = req.uri().to_string();
     let method = req.method().to_string();
 
-    if let None = RE_TABLE.captures(&uri){
-        return serve_file(&uri);
-    }
+    // TODO here parse anything not /table and redirect to index.html
     // Parse request URL with stored Regexp
     let (table, path): (Option<usize>, Option<String>) = match RE_TABLE_NUM.captures(&uri) {
         Some(m) => {
@@ -111,7 +102,7 @@ fn microservice_handler(
         ("GET", Some(table), None) => {
             // GET all items for table t
             let table = table as usize;
-            match table_get_all(table) {
+            match menu_get_all(0) {
                 ApiResult::Ok(s) => {
                     return Box::new(future::ok(
                         Response::builder().status(200).body(Body::from(s)).unwrap(),
@@ -137,7 +128,7 @@ fn microservice_handler(
             let mut bodychunks: Vec<String> = Vec::new();
             bodychunks.push("{\"tables\":{".to_string());
             for i in 0..v.len() {
-                match table_get_all(i) {
+                match menu_get_all(i) {
                     ApiResult::Ok(s) => {
                         let headerstring = format!("\"{}\":",i);
                         bodychunks.push(headerstring);
@@ -227,7 +218,7 @@ enum ApiResult<T> {
 }
 
 
-fn table_get_all(table: usize) -> ApiResult<String> {
+fn menu_get_all(table: usize) -> ApiResult<String> {
     let lock = STORAGE.read();
     let v = &spawn(lock).wait_future().unwrap().vault;
     match v.get(table) {
@@ -249,16 +240,9 @@ fn table_get_all(table: usize) -> ApiResult<String> {
         ),
     }
 }
-// Magic tranform of one kind of error to another
-fn other<E>(err: E) -> Error
-where
-    E: Into<Box<std::error::Error + Send + Sync>>,
-{
-    Error::new(std::io::ErrorKind::Other, err)
-}
 
 fn table_add_items( body: Body, table: usize,
-) -> Box<Future<Item = Response<Body>, Error = std::io::Error> + Send> {
+) -> Box<Future<Item = Response<Body>, Error = Error> + Send> {
     let resp = body.concat2().map(move |chunks| {
         let res = serde_json::from_slice::<TableRequestVec>(chunks.as_ref())
             .map(|t| table_store_new_items(table, t.tab))
@@ -270,7 +254,7 @@ fn table_add_items( body: Body, table: usize,
                 .body(err.to_string().into())
                 .unwrap(),
         }
-    }).map_err(other);
+    });
     Box::new(resp)
 }
 
@@ -328,34 +312,9 @@ fn table_store_new_items(table: usize, v: Vec<TableRequest>) -> usize {
     }
 }
 
-
-fn serve_file(path:&str)-> Box<Future<Item=Response<Body>, Error = Error> + Send> 
-{
-// Only serv the hard coded files needed for this project
-    if let Some(cap) = RE_DOWNLOAD_FILE.captures(path) {
-        let filename = format!("client/{}",cap.get(1).unwrap().as_str());
-        let open_file = File::open(filename);
-        let body = open_file.map(|file| {
-            let chunks = FileChunkStream::new(file);
-            Response::new(Body::wrap_stream(chunks))//.map_err(|e| {
-              //  hyper::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, "Ignorederror"))
-              //hyper::Error::new_user_header()
-            //})
-        });
-        Box::new(body)
-    }else{
-          let ans = "Thou shalt not read forbidden files";
-    let resp = Response::builder()
-        .status(403)
-        .body(Body::from(ans))
-        .unwrap();
-    Box::new(future::ok(resp))  
-    }
-}
-
 fn main() {
-    println!("Starting server port at http://localhost:8888/");
-    let addr = ([127, 0, 0, 1], 8888).into();
+    println!("Starting menu server port at http://localhost:8880/");
+    let addr = ([127, 0, 0, 1], 8880).into();
 
     let server = Server::bind(&addr).serve(|| service_fn(move |req| microservice_handler(req)));
 
@@ -398,28 +357,28 @@ mod tests {
         let mut v: Vec<TableRequest> = Vec::new();
         v.push(TableRequest{itemname: "Something".to_string(),qty : 1, eta:100 });
 
-        let table_get_all_res=match table_get_all(10){
+        let menu_get_all_res=match menu_get_all(10){
             ApiResult::Ok(x) => x,
             _ =>{panic!()}
         };
-        let before:Vec<Record> = serde_json::from_slice(table_get_all_res.as_bytes()).unwrap();
+        let before:Vec<Record> = serde_json::from_slice(menu_get_all_res.as_bytes()).unwrap();
         let storednum =  table_store_new_items(10, v);
         assert_eq!(1, storednum);
-        let table_get_all_res=match table_get_all(10){
+        let menu_get_all_res=match menu_get_all(10){
             ApiResult::Ok(x) => x,
             _ =>{panic!()}
         };
-        let after:Vec<Record> = serde_json::from_slice(table_get_all_res.as_bytes()).unwrap();
+        let after:Vec<Record> = serde_json::from_slice(menu_get_all_res.as_bytes()).unwrap();
 
         // Should be one more entry
         assert!(after.len()-before.len() == 1);
         table_remove_item(10, "1".to_string());
 
-        let table_get_all_res=match table_get_all(10){
+        let menu_get_all_res=match menu_get_all(10){
             ApiResult::Ok(x) => x,
             _ =>{panic!()}
         };
-        let _after:Vec<Record> = serde_json::from_slice(table_get_all_res.as_bytes()).unwrap();
+        let _after:Vec<Record> = serde_json::from_slice(menu_get_all_res.as_bytes()).unwrap();
 
         //TODO Should be back where we started but item ide can not be guessed as they are world uniq now
         //assert_eq!(after.len(),before.len());

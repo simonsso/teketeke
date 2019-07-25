@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Teketeke the resuturant order demo</title>
+  </head>
+  <body>
+
+    <h2>Demonstation order terminal</h2>
+
+    <!-- We will put our React component inside this div. -->
+    <div> Taking orders for table <input type="number" name="UITabNum" id="UITabNum" min="0" max="100" value="0" onchange="request_full_tab"> </div>
+    <div id="top"></div>
+
+    <!-- Load React. -->
+    <!-- Note: when deploying, replace "development.js" with "production.min.js". -->
+    <script src="https://unpkg.com/react@16/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@16/umd/react-dom.development.js" crossorigin></script>
+
+    <!-- Load our React component. -->
+    <script src="button.js"></script>
+      <div id=content>
+    <script>
+      var x = [
+            {
+               "time" : 60,
+                  "itemname" : "Ice cream",
+                  "price" : 159
+            },
+            {
+               "price" : 100,
+               "itemname" : "Coffe",
+               "time" : 90
+            },
+            {
+               "time" : 60,
+                  "itemname" : "Cookie",
+                  "price" : 159
+            },
+            {
+               "price" : 100,
+               "itemname" : "Tea",
+               "time" : 90
+            },
+      ];
+      for (line of x) {
+         dynamic_menu(line);
+      }
+      setInterval(request_full_tab,10);
+    </script>
+      </div>
+
+    <ul id=bartab>
+    </ul>
+  </body>
+</html>

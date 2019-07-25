@@ -7,13 +7,13 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-hyper = "0.12.33"
+hyper-staticfile = "0.3"
+hyper = "0.12"
 regex = "1.1.0"
 lazy_static = "1.0"
 tokio = "0.1"
 futures = "0.1.28"
 futures-locks = "0.3.3"
-hyper-staticfile = "0.3"
 serde = "1.0"
 serde_derive = "1.0"
 serde_json = "1.0"
