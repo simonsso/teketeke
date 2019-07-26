@@ -349,8 +349,9 @@ fn serve_file(path: &str) -> Box<Future<Item = Response<Body>, Error = Error> + 
 }
 
 fn main() {
-    println!("Starting server port at http://localhost:8888/");
-    let addr = ([127, 0, 0, 1], 8888).into();
+    let portnum=8888;
+    println!("Starting server port at http://localhost:{}/index.html",portnum);
+    let addr = ([127, 0, 0, 1], portnum).into();
 
     let server = Server::bind(&addr).serve(|| service_fn(move |req| microservice_handler(req)));
 

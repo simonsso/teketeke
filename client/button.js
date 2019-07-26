@@ -16,11 +16,11 @@ class LikeButton extends React.Component {
     return e(
       'button',
       { onClick: () => {
-              var tablenumer=document.getElementById("UITabNum");
-              var tab=tablenumer?tablenumer.value:0;
+              let tablenumer=document.getElementById("UITabNum");
+              let tab=tablenumer?tablenumer.value:0;
 
-              var qty =1;
-              var ans=post_order({
+              let qty =1;
+              let ans=post_order({
                     table:tab,
                     itemname:this.state.s.itemname,
                     qty:qty,
@@ -59,14 +59,6 @@ class DeleteButton extends React.Component {
     }
 }
     
-
-var dynamic_like=function(){
-   const domContainer = document.querySelector('#top');
-   var p= document.createElement("div");
-   p.append("Some text");
-   domContainer.append(p);
-   ReactDOM.render(e(LikeButton), p);
-}
 
 var dynamic_menu=function(s){
    const domContainer = document.querySelector('#top');
