@@ -37,3 +37,12 @@ Http DELETE can be requested to http://localhost/table/x/y where x is the table 
 
 ## Environment
 Buit and debuged with lldb and visual studio code on Linix. Also verified by a native build on android.
+
+## Design decisions and limitations
+* Micro service for handle the menu list is still unimplemented it is eumulated by a hardcoded list in the client
+* local storage is only stored in running application without any store to disk.
+
+## Acknowleages
+Lots of inspiration for this project was found in 
+Hands-On Microservices with Rust: Build, test, and deploy scalable and reactive microservices with Rust 2018
+by https://www.amazon.co.jp/dp/1789342759/ref=cm_sw_em_r_mt_dp_U_v8KoDbBQNXD3Y
