@@ -5,7 +5,6 @@ extern crate hyper_staticfile;
 extern crate serde_json;
 
 use std::io::Error;
-//use hyper::error::Error;
 
 use futures::{future, Future, Stream};
 use hyper::{Body, Request, Response, Server, StatusCode};
@@ -336,10 +335,7 @@ fn serve_file(path: &str) -> Box<Future<Item = Response<Body>, Error = Error> + 
         let open_file = File::open(filename);
         let body = open_file.map(|file| {
             let chunks = FileChunkStream::new(file);
-            Response::new(Body::wrap_stream(chunks)) //.map_err(|e| {
-                                                     //  hyper::Error::Io(std::io::Error::new(std::io::ErrorKind::Other, "Ignorederror"))
-                                                     //hyper::Error::new_user_header()
-                                                     //})
+            Response::new(Body::wrap_stream(chunks))
         });
         Box::new(body)
     } else {
