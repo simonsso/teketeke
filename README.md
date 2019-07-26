@@ -22,25 +22,25 @@ data can be verified
 curl http://localhost:8888/table/2|json_pp 
 curl http://localhost:8888/table/ |json_pp 
 
-## Ieas about typical use cases
-Order someitems:
+## Some typical use-cases
+Order some items:
 Client loads the menu from /menu/ (TODO) picks items from its json object and posts a new json to /table/NN/  (DONE)
 
 Cook item
-get item from http://localhost:8888/table/ (DONE only in backend)
+get item from http://localhost:8888/table/ (DONE only in back-end)
 update item on /table/item (TODO)
 update menu with decreased inventory (TODO)
 update item to invoice (TODO)
 
 Change order
-Http DELETE can be requested to http://localhost/table/x/y where x is the table num and y is the item num as returned from the GET operations (DONE in client and backend)
+Http DELETE can be requested to http://localhost/table/x/y where x is the table num and y is the item num as returned from the GET operations (DONE in client and back-end)
 
 ## Environment
-Buit and debuged with lldb and visual studio code on Linix. Also verified by a native build on android.
+Built and debugged with lldb and visual studio code on Linux. Also verified by a native build on android.
 
 ## Design decisions and limitations
-* Micro service for handle the menu list is still unimplemented it is eumulated by a hardcoded list in the client
+* Micro service for handle the menu list is still unimplemented it is emulated by a hard-coded list in the client
 * local storage is only stored in running application without any store to disk.
 
-## Acknowleages
+## Acknowledgements 
 Lots of inspiration for this project was found in *Hands-On Microservices with Rust: Build, test, and deploy scalable and reactive microservices with Rust 2018* By *Denis Kolodin* https://www.amazon.co.jp/dp/1789342759/ref=cm_sw_em_r_mt_dp_U_v8KoDbBQNXD3Y
