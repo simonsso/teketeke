@@ -2,7 +2,7 @@
 Building a micro service based izakaya order system in Rust
 
 Project Type
-Personal development project to experiment and learn more about rust and microservices. This is the first time I used tokio and the hyper webserver.
+Personal development project to experiment and learn more about rust and microservices. This is the first time I used tokio and the hyper webserver, and react javascript framework.
 
 The store contains two micro services, the menu and the table. The main actors are the kitchen and the customer (using the staff as client or on table application)
 
