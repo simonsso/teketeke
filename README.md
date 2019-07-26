@@ -1,4 +1,5 @@
-# teketeke
+[![Build Status](https://travis-ci.org/simonsso/teketeke.svg?branch=master)](https://travis-ci.org/simonsso/teketeke)
+# teketeke 
 Building a micro service based izakaya order system in Rust
 
 Project Type
