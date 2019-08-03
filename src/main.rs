@@ -4,7 +4,8 @@ extern crate hyper;
 extern crate hyper_staticfile;
 extern crate serde_json;
 
-use std::io::Error;
+use std::error::Error;
+
 
 use futures::{future, Future, Stream};
 use hyper::{Body, Request, Response, Server, StatusCode};
@@ -246,11 +247,11 @@ fn table_get_all(table: usize) -> ApiResult<String> {
     }
 }
 // Magic tranform of one kind of error to another
-fn other<E>(err: E) -> Error
+fn other<E>(err: E) -> std::io::Error
 where
     E: Into<Box<std::error::Error + Send + Sync>>,
 {
-    Error::new(std::io::ErrorKind::Other, err)
+    std::io::Error::new(std::io::ErrorKind::Other, err)
 }
 
 fn table_add_items(
@@ -328,7 +329,7 @@ fn table_store_new_items(table: usize, v: Vec<TableRequest>) -> usize {
     }
 }
 
-fn serve_file(path: &str) -> Box<Future<Item = Response<Body>, Error = Error> + Send> {
+fn serve_file(path: &str) -> Box<Future<Item = Response<Body>, Error = std::io::Error> + Send> {
     // Only serv the hard coded files needed for this project
     if let Some(cap) = RE_DOWNLOAD_FILE.captures(path) {
         let filename = format!("client/{}", cap.get(1).unwrap().as_str());
