@@ -10,7 +10,7 @@
 
     <!-- We will put our React component inside this div. -->
     <div> Taking orders for table <input type="number" name="UITabNum" onchange="request_full_tab()" id="UITabNum" min="0" max="100" value="0"> 
-    <input type="checkbox" name="autoupdate" id="UIAutoUpdate"/> Auto update
+    <input type="checkbox" name="autoupdate" id="UIAutoUpdate" checked/> Auto update
     <script>
     var autoupdate=function(){
         var autoupdate_enambed = document.getElementById("UIAutoUpdate").checked;
@@ -18,7 +18,7 @@
            request_full_tab();
         }
     }
-    setInterval(autoupdate,1);
+    setInterval(autoupdate,1000);
     </script>
     </div>
 
