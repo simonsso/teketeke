@@ -84,15 +84,15 @@ var post_order=function(o){
 }
 
 var request_full_tab = function(){
-    let tablenumer=document.getElementById("UITabNum");
-    let tab=tablenumer?tablenumer.value:0;
-    let bartab=fetch('http://localhost:8888/table/'+tab, {
-       method:"GET",
-       headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      }}
-    ).then(response => response.json()).then(response => {print_full_tab(tab,response)});
+      let tablenumer=document.getElementById("UITabNum");
+      let tab=tablenumer?tablenumer.value:0;
+      let bartab=fetch('http://localhost:8888/table/'+tab, {
+        method:"GET",
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        }}
+      ).then(response => response.json()).then(response => {print_full_tab(tab,response)});
 }
 
 var print_full_tab=function(tableid,resp){
