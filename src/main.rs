@@ -6,10 +6,10 @@ extern crate serde_json;
 
 use std::error::Error;
 
-
 use futures::{future, Future, Stream};
 use hyper::{Body, Request, Response, Server, StatusCode};
 
+use hyper::error::Error as hyper_errors;
 use hyper::service::service_fn;
 use lazy_static::lazy_static;
 
@@ -167,21 +167,28 @@ fn microservice_handler(
         }
         ("POST", Some(table), None) => {
             let lock = STORAGE.read();
-            let v = &spawn(lock).wait_future().unwrap().vault;
-            match v.get(table as usize) {
-                Some(_x) => {
-                    return table_add_items(req.into_body(), table);
-                }
+            let tablelist = &spawn(lock).wait_future().unwrap().vault;
+            return Box::new(match tablelist.get(table as usize) {
+                //TODO replace None case and Some case here
+                Some(_) => {       // Sic TODO: this finds the tables vector and then does not use it
+                    let boxedresult=table_add_items(req.into_body(),table);
+                    let f =boxedresult.map_err(teketeke_to_stdio_err).map(move |s|{ 
+                            match s {
+                                Ok(s) => Response::builder().status(200).body(Body::from(s)),
+                                Err(TeketekeError::InternalError(s)) => Response::builder().status(417).body(Body::from(s)),
+                                _ =>  Response::builder().status(418).body(Body::from("Unknown error")),
+                            }.map_err(other).and_then(|f|{f})
+                    });
+                    f
+                },
                 None => {
-                    let err = "I am a tea pot Error: this table is not allocate - build a bigger restaurant";
-                    return Box::new(future::ok(
-                        Response::builder()
+                    let err = "I am a tea pot Error: this table is not allocated - build a bigger restaurant";
+                    Ok(Response::builder()
                             .status(418)
                             .body(Body::from(err))
-                            .unwrap(),
-                    ));
+                            .map_err(other))
                 }
-            }
+            });
         }
         ("DELETE", Some(table), Some(path)) => {
             // Remove something from table t
@@ -218,11 +225,13 @@ fn microservice_handler(
         .unwrap();
     Box::new(future::ok(resp))
 }
-
+#[derive(Debug)]
 enum ApiResult<T> {
     Ok(T),
     Err(u16, String),
 }
+
+
 
 fn table_get_all(table: usize) -> ApiResult<String> {
     let lock = STORAGE.read();
@@ -246,7 +255,7 @@ fn table_get_all(table: usize) -> ApiResult<String> {
         ),
     }
 }
-// Magic tranform of one kind of error to another
+// Magic tranform of one kind of error to other
 fn other<E>(err: E) -> std::io::Error
 where
     E: Into<Box<std::error::Error + Send + Sync>>,
@@ -254,26 +263,53 @@ where
     std::io::Error::new(std::io::ErrorKind::Other, err)
 }
 
+// Magic tranform of one kind of error to other
+fn to_stdio_err(e:hyper::Error) -> std::io::Error
+{
+    std::io::Error::new(std::io::ErrorKind::Other, e)
+}
+
+enum TeketekeError<E>
+where  E: Into<Box<std::error::Error + Send + Sync>>,
+{
+    ExternalError(E),
+    InternalError(String),
+}
+
+fn intoTeketekeError<E>(err: E) -> TeketekeError<E>
+where
+    E: Into<Box<std::error::Error + Send + Sync>>,
+{
+    TeketekeError::ExternalError(err)
+}
+
+fn teketeke_to_stdio_err(e:TeketekeError<std::io::Error>) -> std::io::Error
+{
+    match e {
+        TeketekeError::ExternalError(err) => err,
+        _ => {
+                let not_found = std::io::ErrorKind::NotFound;
+                std::io::Error::from(not_found)
+        }
+    }
+}
+
 fn table_add_items(
     body: Body,
-    table: usize,
-) -> Box<Future<Item = Response<Body>, Error = std::io::Error> + Send> {
-    let resp = body
-        .concat2()
+    table: usize) -> Box<Future<Item=Result<String,TeketekeError<std::io::Error>>, Error = TeketekeError<std::io::Error>> + Send> {
+    let res = body.concat2()
         .map(move |chunks| {
-            let res = serde_json::from_slice::<TableRequestVec>(chunks.as_ref())
-                .map(|t| table_store_new_items(table, t.tab))
-                .and_then(|resp| serde_json::to_string(&resp));
-            match res {
-                Ok(body) => Response::new(body.into()),
-                Err(err) => Response::builder()
-                    .status(StatusCode::UNPROCESSABLE_ENTITY)
-                    .body(err.to_string().into())
-                    .unwrap(),
-            }
-        })
-        .map_err(other);
-    Box::new(resp)
+            serde_json::from_slice::<TableRequestVec>(chunks.as_ref())
+                .map(|t| table_store_new_items(table, t.tab)).map_err(other).map_err(|e|{intoTeketekeError::<std::io::Error>(e)})
+                .and_then(|x|{ 
+                    if x == 0 {
+                        Err(TeketekeError::InternalError("Nothing modified".to_string()))
+                    }else{                    
+                        Ok(x.to_string())
+                    }
+                })    
+        }).map_err(other).map_err(|e|{intoTeketekeError::<std::io::Error>(e)});
+    Box::new(res)
 }
 
 fn table_remove_item(table: usize, path: String) -> ApiResult<String> {
@@ -281,7 +317,6 @@ fn table_remove_item(table: usize, path: String) -> ApiResult<String> {
         Ok(x) => x,
         Err(_x) => return ApiResult::Err(503, "Illegal table number".to_string()),
     };
-    println!();
     let outerlock = STORAGE.read().map(|outer| {
         // range check done is outside
         let innerlock = (*outer).vault[table as usize].write().map(|mut inner| {
@@ -303,7 +338,7 @@ fn table_remove_item(table: usize, path: String) -> ApiResult<String> {
     ApiResult::Ok("".to_string())
 }
 
-fn table_store_new_items(table: usize, v: Vec<TableRequest>) -> usize {
+fn table_store_new_items(table: usize, v: Vec<TableRequest>) -> u32 {
     let mut target: Vec<Record> = Vec::with_capacity(v.len());
     for i in v {
         target.push(Record {
@@ -324,7 +359,7 @@ fn table_store_new_items(table: usize, v: Vec<TableRequest>) -> usize {
         spawn(innerlock).wait_future()
     });
     match spawn(outerlock).wait_future() {
-        Ok(_) => retval,
+        Ok(_) => retval as u32,
         Err(_) => 0,
     }
 }
@@ -376,8 +411,13 @@ mod tests {
         let body = Body::wrap_stream(stream);
         let table: usize = 1;
         let ans = table_add_items(body, table);
-        let r = spawn(ans).wait_future().unwrap();
-        assert!(r.status() == 422);
+        let ans = spawn(ans).wait_future();
+        match ans {
+            Err(_) =>     {      }
+            Ok(_) =>      {assert!(true,"should have failed")}
+            _ => {assert!(true,"test case took unexpected path")}
+        }
+        //assert!(r.status() == 422);
 
         let order = r#"{"tab":[{"itemname": "Edamame","qty" : 100 ,"eta":100 },{"itemname": "Nama biru","qty" : 5 ,"eta":200} ]}"#;
         let chunks = vec![order];
@@ -385,8 +425,14 @@ mod tests {
         let body = Body::wrap_stream(stream);
         let table: usize = 1;
         let ans = table_add_items(body, table);
-        let r = spawn(ans).wait_future().unwrap();
-        assert!(r.status() == 200);
+        let ans = spawn(ans).wait_future();
+        match ans {
+            Err(_) => {assert!(true,"should not have failed")},
+            Ok(Ok(x)) =>  {assert_eq!(x,2.to_string()) },
+            _ => {assert!(true,"test case took unexpected path")},
+        }
+
+        
     }
     #[test]
     fn check_store_values() {
