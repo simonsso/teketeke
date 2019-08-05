@@ -168,7 +168,7 @@ fn microservice_handler(
         ("POST", Some(table), None) => {
             let lock = STORAGE.read();
             let tablelist = &spawn(lock).wait_future().unwrap().vault;
-            return Box::new(match tablelist.get(table as usize) {
+            return match tablelist.get(table as usize) {
                 //TODO replace None case and Some case here
                 Some(_) => {       // Sic TODO: this finds the tables vector and then does not use it
                     let boxedresult=table_add_items(req.into_body(),table);
@@ -177,18 +177,18 @@ fn microservice_handler(
                                 Ok(s) => Response::builder().status(200).body(Body::from(s)),
                                 Err(TeketekeError::InternalError(s)) => Response::builder().status(417).body(Body::from(s)),
                                 _ =>  Response::builder().status(418).body(Body::from("Unknown error")),
-                            }.map_err(other).and_then(|f|{f})
+                            }.unwrap()
                     });
-                    f
+                    Box::new(f)
                 },
                 None => {
                     let err = "I am a tea pot Error: this table is not allocated - build a bigger restaurant";
-                    Ok(Response::builder()
+                    let response = Response::builder()
                             .status(418)
-                            .body(Body::from(err))
-                            .map_err(other))
+                            .body(Body::from(err)).unwrap();
+                    Box::new(future::ok(response))
                 }
-            });
+            };
         }
         ("DELETE", Some(table), Some(path)) => {
             // Remove something from table t
