@@ -27,7 +27,7 @@ table-> table_storage
 @enduml
 
 
-@startuml Setup Shop
+@startuml SetupShop
 ==open shop==
 actor kitchen
 kitchen -> menu: PUT -- put todays inventory to menu
