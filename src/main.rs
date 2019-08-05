@@ -111,19 +111,15 @@ fn microservice_handler(
             // GET all items for table t
             let table = table as usize;
             match table_get_all(table) {
-                ApiResult::Ok(s) => {
-                    Box::new(future::ok(
-                        Response::builder().status(200).body(Body::from(s)).unwrap(),
-                    ))
-                }
-                ApiResult::Err(code, s) => {
-                    Box::new(future::ok(
-                        Response::builder()
-                            .status(code)
-                            .body(Body::from(s))
-                            .unwrap(),
-                    ))
-                }
+                ApiResult::Ok(s) => Box::new(future::ok(
+                    Response::builder().status(200).body(Body::from(s)).unwrap(),
+                )),
+                ApiResult::Err(code, s) => Box::new(future::ok(
+                    Response::builder()
+                        .status(code)
+                        .body(Body::from(s))
+                        .unwrap(),
+                )),
             }
         }
         ("GET", None, None) => {
@@ -170,22 +166,29 @@ fn microservice_handler(
             let tablelist = &spawn(lock).wait_future().unwrap().vault;
             match tablelist.get(table as usize) {
                 //TODO replace None case and Some case here
-                Some(_) => {       // Sic TODO: this finds the tables vector and then does not use it
-                    let boxedresult=table_add_items(req.into_body(),table);
-                    let f =boxedresult.map_err(teketeke_to_stdio_err).map(move |s|{ 
-                            match s {
-                                Ok(s) => Response::builder().status(200).body(Body::from(s)),
-                                Err(TeketekeError::InternalError(s)) => Response::builder().status(417).body(Body::from(s)),
-                                _ =>  Response::builder().status(418).body(Body::from("Unknown error")),
-                            }.unwrap()
+                Some(_) => {
+                    // Sic TODO: this finds the tables vector and then does not use it
+                    let boxedresult = table_add_items(req.into_body(), table);
+                    let f = boxedresult.map_err(teketeke_to_stdio_err).map(move |s| {
+                        match s {
+                            Ok(s) => Response::builder().status(200).body(Body::from(s)),
+                            Err(TeketekeError::InternalError(s)) => {
+                                Response::builder().status(417).body(Body::from(s))
+                            }
+                            _ => Response::builder()
+                                .status(418)
+                                .body(Body::from("Unknown error")),
+                        }
+                        .unwrap()
                     });
                     Box::new(f)
-                },
+                }
                 None => {
                     let err = "I am a tea pot Error: this table is not allocated - build a bigger restaurant";
                     let response = Response::builder()
-                            .status(418)
-                            .body(Body::from(err)).unwrap();
+                        .status(418)
+                        .body(Body::from(err))
+                        .unwrap();
                     Box::new(future::ok(response))
                 }
             }
@@ -195,24 +198,20 @@ fn microservice_handler(
             //Todo find a way to identify items in table tab... maybe with id
             let table = table as usize;
             match table_remove_item(table, path) {
-                ApiResult::Ok(s) => {
-                    Box::new(future::ok(
-                        Response::builder().status(200).body(Body::from(s)).unwrap(),
-                    ))
-                }
-                ApiResult::Err(code, s) => {
-                    Box::new(future::ok(
-                        Response::builder()
-                            .status(code)
-                            .body(Body::from(s))
-                            .unwrap(),
-                    ))
-                }
+                ApiResult::Ok(s) => Box::new(future::ok(
+                    Response::builder().status(200).body(Body::from(s)).unwrap(),
+                )),
+                ApiResult::Err(code, s) => Box::new(future::ok(
+                    Response::builder()
+                        .status(code)
+                        .body(Body::from(s))
+                        .unwrap(),
+                )),
             }
         }
         ("UPDATE", Some(_t), Some(_path)) => {
             // Change some object for instance when it is deliverd to table
-                // Fall throu default response
+            // Fall throu default response
             let ans = "Not implemented";
             let resp = Response::builder()
                 .status(501)
@@ -222,7 +221,7 @@ fn microservice_handler(
         }
         _ => {
             // Unsupported operation
-                // Fall throu default response
+            // Fall throu default response
             let ans = "Not implemented";
             let resp = Response::builder()
                 .status(501)
@@ -238,8 +237,6 @@ enum ApiResult<T> {
     Ok(T),
     Err(u16, String),
 }
-
-
 
 fn table_get_all(table: usize) -> ApiResult<String> {
     let lock = STORAGE.read();
@@ -272,13 +269,13 @@ where
 }
 
 // Magic tranform of one kind of error to other
-fn to_stdio_err(e:hyper::Error) -> std::io::Error
-{
+fn to_stdio_err(e: hyper::Error) -> std::io::Error {
     std::io::Error::new(std::io::ErrorKind::Other, e)
 }
 
 enum TeketekeError<E>
-where  E: Into<Box<std::error::Error + Send + Sync>>,
+where
+    E: Into<Box<std::error::Error + Send + Sync>>,
 {
     ExternalError(E),
     InternalError(String),
@@ -291,32 +288,42 @@ where
     TeketekeError::ExternalError(err)
 }
 
-fn teketeke_to_stdio_err(e:TeketekeError<std::io::Error>) -> std::io::Error
-{
+fn teketeke_to_stdio_err(e: TeketekeError<std::io::Error>) -> std::io::Error {
     match e {
         TeketekeError::ExternalError(err) => err,
         _ => {
-                let not_found = std::io::ErrorKind::NotFound;
-                std::io::Error::from(not_found)
+            let not_found = std::io::ErrorKind::NotFound;
+            std::io::Error::from(not_found)
         }
     }
 }
 
 fn table_add_items(
     body: Body,
-    table: usize) -> Box<Future<Item=Result<String,TeketekeError<std::io::Error>>, Error = TeketekeError<std::io::Error>> + Send> {
-    let res = body.concat2()
+    table: usize,
+) -> Box<
+    Future<
+            Item = Result<String, TeketekeError<std::io::Error>>,
+            Error = TeketekeError<std::io::Error>,
+        > + Send,
+> {
+    let res = body
+        .concat2()
         .map(move |chunks| {
             serde_json::from_slice::<TableRequestVec>(chunks.as_ref())
-                .map(|t| table_store_new_items(table, t.tab)).map_err(other).map_err(|e|{intoTeketekeError::<std::io::Error>(e)})
-                .and_then(|x|{ 
+                .map(|t| table_store_new_items(table, t.tab))
+                .map_err(other)
+                .map_err(|e| intoTeketekeError::<std::io::Error>(e))
+                .and_then(|x| {
                     if x == 0 {
                         Err(TeketekeError::InternalError("Nothing modified".to_string()))
-                    }else{                    
+                    } else {
                         Ok(x.to_string())
                     }
-                })    
-        }).map_err(other).map_err(|e|{intoTeketekeError::<std::io::Error>(e)});
+                })
+        })
+        .map_err(other)
+        .map_err(|e| intoTeketekeError::<std::io::Error>(e));
     Box::new(res)
 }
 
@@ -393,8 +400,11 @@ fn serve_file(path: &str) -> Box<Future<Item = Response<Body>, Error = std::io::
 }
 
 fn main() {
-    let portnum=8888;
-    println!("Starting server port at http://localhost:{}/index.html",portnum);
+    let portnum = 8888;
+    println!(
+        "Starting server port at http://localhost:{}/index.html",
+        portnum
+    );
     let addr = ([127, 0, 0, 1], portnum).into();
 
     let server = Server::bind(&addr).serve(|| service_fn(move |req| microservice_handler(req)));
@@ -421,9 +431,9 @@ mod tests {
         let ans = table_add_items(body, table);
         let ans = spawn(ans).wait_future();
         match ans {
-            Err(_) =>     {      }
-            Ok(_) =>      {assert!(true,"should have failed")}
-            _ => {assert!(true,"test case took unexpected path")}
+            Err(_) => {}
+            Ok(_) => assert!(true, "should have failed"),
+            _ => assert!(true, "test case took unexpected path"),
         }
         //assert!(r.status() == 422);
 
@@ -435,12 +445,10 @@ mod tests {
         let ans = table_add_items(body, table);
         let ans = spawn(ans).wait_future();
         match ans {
-            Err(_) => {assert!(true,"should not have failed")},
-            Ok(Ok(x)) =>  {assert_eq!(x,2.to_string()) },
-            _ => {assert!(true,"test case took unexpected path")},
+            Err(_) => assert!(true, "should not have failed"),
+            Ok(Ok(x)) => assert_eq!(x, 2.to_string()),
+            _ => assert!(true, "test case took unexpected path"),
         }
-
-        
     }
     #[test]
     fn check_store_values() {
