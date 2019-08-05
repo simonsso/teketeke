@@ -112,17 +112,17 @@ fn microservice_handler(
             let table = table as usize;
             match table_get_all(table) {
                 ApiResult::Ok(s) => {
-                    return Box::new(future::ok(
+                    Box::new(future::ok(
                         Response::builder().status(200).body(Body::from(s)).unwrap(),
-                    ));
+                    ))
                 }
                 ApiResult::Err(code, s) => {
-                    return Box::new(future::ok(
+                    Box::new(future::ok(
                         Response::builder()
                             .status(code)
                             .body(Body::from(s))
                             .unwrap(),
-                    ));
+                    ))
                 }
             }
         }
@@ -156,19 +156,19 @@ fn microservice_handler(
             let stream = futures::stream::iter_ok::<_, ::std::io::Error>(bodychunks);
             let body = Body::wrap_stream(stream);
             let resp = Response::builder().status(200).body(body).unwrap();
-            return Box::new(future::ok(resp));
+            Box::new(future::ok(resp))
         }
         ("POST", None, None) => {
             let resp = Response::builder()
                 .status(501)
                 .body(req.into_body())
                 .unwrap();
-            return Box::new(future::ok(resp));
+            Box::new(future::ok(resp))
         }
         ("POST", Some(table), None) => {
             let lock = STORAGE.read();
             let tablelist = &spawn(lock).wait_future().unwrap().vault;
-            return match tablelist.get(table as usize) {
+            match tablelist.get(table as usize) {
                 //TODO replace None case and Some case here
                 Some(_) => {       // Sic TODO: this finds the tables vector and then does not use it
                     let boxedresult=table_add_items(req.into_body(),table);
@@ -188,7 +188,7 @@ fn microservice_handler(
                             .body(Body::from(err)).unwrap();
                     Box::new(future::ok(response))
                 }
-            };
+            }
         }
         ("DELETE", Some(table), Some(path)) => {
             // Remove something from table t
@@ -196,35 +196,43 @@ fn microservice_handler(
             let table = table as usize;
             match table_remove_item(table, path) {
                 ApiResult::Ok(s) => {
-                    return Box::new(future::ok(
+                    Box::new(future::ok(
                         Response::builder().status(200).body(Body::from(s)).unwrap(),
-                    ));
+                    ))
                 }
                 ApiResult::Err(code, s) => {
-                    return Box::new(future::ok(
+                    Box::new(future::ok(
                         Response::builder()
                             .status(code)
                             .body(Body::from(s))
                             .unwrap(),
-                    ));
+                    ))
                 }
             }
         }
         ("UPDATE", Some(_t), Some(_path)) => {
             // Change some object for instance when it is deliverd to table
+                // Fall throu default response
+            let ans = "Not implemented";
+            let resp = Response::builder()
+                .status(501)
+                .body(Body::from(ans))
+                .unwrap();
+            Box::new(future::ok(resp))
         }
         _ => {
             // Unsupported operation
+                // Fall throu default response
+            let ans = "Not implemented";
+            let resp = Response::builder()
+                .status(501)
+                .body(Body::from(ans))
+                .unwrap();
+            Box::new(future::ok(resp))
         }
-    };
-    // Fall throu default response
-    let ans = "Not implemented";
-    let resp = Response::builder()
-        .status(501)
-        .body(Body::from(ans))
-        .unwrap();
-    Box::new(future::ok(resp))
+    }
 }
+
 #[derive(Debug)]
 enum ApiResult<T> {
     Ok(T),
